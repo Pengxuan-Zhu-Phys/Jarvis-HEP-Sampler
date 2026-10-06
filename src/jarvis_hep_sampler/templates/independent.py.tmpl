@@ -1,0 +1,47 @@
+"""__METHOD__: one-line description (shown by Jarvis man __METHOD__)."""
+
+import numpy as np
+
+from jarvis_hep_sampler import DrawContext, SetupContext
+
+PLUGIN = {
+    "api_version": 1,
+    "method": "__METHOD__",
+    "version": "0.1.0",
+    "profile": "independent",
+    "description": "One-line description.",
+    # "statistical": False,
+    # "block_size": 64,          # declare it to use draw_block() instead of draw()
+}
+
+# Optional. Delete it, or set it to None, to leave the Bounds options unchecked.
+OPTIONS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "upper": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "description": "Upper edge of the scanned unit cube.",
+        },
+    },
+    "additionalProperties": False,
+}
+
+
+def prepare(setup: SetupContext):
+    """Run once per scan, and again on resume. Return what draw() needs."""
+    return {"upper": float(setup.options.get("upper", 1.0))}
+
+
+def draw(context: DrawContext, rng: np.random.Generator, plan) -> np.ndarray:
+    """Return one point: shape (context.dimension,), values in [0, 1]."""
+    return rng.random(context.dimension) * plan["upper"]
+
+
+# Optional hooks. Delete the ones you do not need.
+# def validate_options(options): ...
+# def settings_rows(setup, plan): return [("upper", plan["upper"])]
+# def summary_rows(plan, stats): return []
+# def stop_reason(plan, stats): return None
+# def status(plan, stats): return {}

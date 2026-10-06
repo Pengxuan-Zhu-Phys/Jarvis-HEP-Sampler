@@ -1,0 +1,63 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Verify release identity
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
+          version = project["version"]
+          tag_version = os.environ["RELEASE_TAG"].removeprefix("v")
+          version_file = Path("src/jarvis_hep_sampler/_version.py").read_text(encoding="utf-8")
+          if project["name"] != "Jarvis-HEP-Sampler":
+              raise SystemExit(f"Refusing release: project.name is {project['name']!r}")
+          if version != tag_version:
+              raise SystemExit(f"Refusing release: tag {tag_version!r} != project version {version!r}")
+          if f'__version__ = "{version}"' not in version_file:
+              raise SystemExit("Refusing release: _version.py does not match pyproject.toml")
+          PY
+      - name: Test and build
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pytest
+          python -m build
+          python -m twine check dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-distributions
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

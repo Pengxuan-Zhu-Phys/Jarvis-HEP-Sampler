@@ -1,0 +1,340 @@
+#!/usr/bin/env bash
+
+_jhsrel_SRC="$0"
+if [[ -n "${BASH_VERSION:-}" ]]; then
+  _jhsrel_SRC="${BASH_SOURCE[0]}"
+elif [[ -n "${ZSH_VERSION:-}" ]]; then
+  _jhsrel_SRC="$(eval 'echo ${(%):-%x}')"
+fi
+
+_jhsrel_DIR="$(cd "$(dirname "$_jhsrel_SRC")" && pwd)"
+
+_jhsrel_usage() {
+  cat <<'EOF'
+Usage:
+  jhsrel <version> [-v|--verbose]
+
+Examples:
+  source ./jhsrel
+  jhsrel 0.1.1
+  jhsrel 0.1.1 -v
+
+Notes:
+  jhsrel publishes Jarvis-HEP-Sampler to PyPI, refreshes the local editable install
+  (pip install -e .), and verifies the installed package, its template and registry.
+EOF
+}
+
+_jhsrel_install_editable() {
+  python3 -m pip uninstall -y Jarvis-HEP-Sampler jarvis-hep-sampler jarvis_hep_sampler >/dev/null 2>&1 || true
+
+  # Defensive cleanup for stale metadata from previous local installs.
+  # Multiple leftover dist-info folders can make importlib.metadata report an
+  # older version after a release reinstall.
+  python3 - <<'PY'
+from __future__ import annotations
+import glob
+import os
+import shutil
+import sysconfig
+
+purelib = sysconfig.get_paths().get("purelib", "")
+if purelib and os.path.isdir(purelib):
+    patterns = [
+        "jarvis_hep_sampler-*.dist-info",
+        "Jarvis_HEP_Sampler-*.dist-info",
+        "jarvis_hep_sampler*.egg-info",
+        "Jarvis_HEP_Sampler*.egg-info",
+        "jarvis_hep_sampler*.egg-link",
+        "Jarvis_HEP_Sampler*.egg-link",
+    ]
+    for pat in patterns:
+        for path in glob.glob(os.path.join(purelib, pat)):
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+    installed_pkg = os.path.join(purelib, "jarvis_hep_sampler")
+    if os.path.isdir(installed_pkg):
+        shutil.rmtree(installed_pkg, ignore_errors=True)
+PY
+
+  python3 -m pip install --no-deps --force-reinstall -e .
+}
+
+_jhsrel_prune_installed_metadata() {
+  python3 - <<'PY'
+from __future__ import annotations
+import glob
+import os
+import re
+import shutil
+import sysconfig
+
+purelib = sysconfig.get_paths().get("purelib", "")
+if not purelib or not os.path.isdir(purelib):
+    raise SystemExit(0)
+
+dist_infos = []
+for pat in (
+    "jarvis_hep_sampler-*.dist-info",
+    "Jarvis_HEP_Sampler-*.dist-info",
+):
+    for path in glob.glob(os.path.join(purelib, pat)):
+        base = os.path.basename(path)
+        m = re.search(r"-(\d+(?:\.\d+)*)\.dist-info$", base)
+        if m:
+            version_tuple = tuple(int(x) for x in m.group(1).split("."))
+        else:
+            version_tuple = (-1,)
+        dist_infos.append((version_tuple, path))
+
+dist_infos.sort(key=lambda item: item[0], reverse=True)
+for _ver, stale_path in dist_infos[1:]:
+    shutil.rmtree(stale_path, ignore_errors=True)
+
+for pat in (
+    "jarvis_hep_sampler*.egg-info",
+    "Jarvis_HEP_Sampler*.egg-info",
+    "jarvis_hep_sampler*.egg-link",
+    "Jarvis_HEP_Sampler*.egg-link",
+):
+    for path in glob.glob(os.path.join(purelib, pat)):
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+PY
+}
+
+_jhsrel_clean_artifacts() {
+  python3 - <<'PY'
+from __future__ import annotations
+import glob
+import os
+import shutil
+
+for path in ("dist", "build"):
+    if os.path.isdir(path):
+        shutil.rmtree(path, ignore_errors=True)
+for pattern in ("*.egg-info", "src/*.egg-info"):
+    for matched in glob.glob(pattern):
+        if os.path.isdir(matched):
+            shutil.rmtree(matched, ignore_errors=True)
+PY
+}
+
+_jhsrel_clean_local_junk() {
+  python3 - <<'PY'
+from __future__ import annotations
+from pathlib import Path
+
+for path in Path(".").rglob(".DS_Store"):
+    try:
+        path.unlink()
+        print(f"[jhsrel] removed local junk file: {path}")
+    except OSError as exc:
+        print(f"[jhsrel] WARNING: failed to remove {path}: {exc}")
+PY
+}
+
+_jhsrel_bump_version() {
+  local version="$1"
+  python3 - <<'PY' "$version"
+from pathlib import Path
+import re
+import sys
+
+version = sys.argv[1]
+
+pyproject = Path("pyproject.toml")
+text = pyproject.read_text(encoding="utf-8")
+updated, n = re.subn(
+    r'(?m)^version\s*=\s*"[^"]+"$',
+    f'version = "{version}"',
+    text,
+    count=1,
+)
+if n != 1:
+    raise SystemExit("[jhsrel] Failed to locate version field in pyproject.toml")
+pyproject.write_text(updated, encoding="utf-8")
+print(f"[jhsrel] pyproject.toml updated to {version}")
+
+version_file = Path("src/jarvis_hep_sampler/_version.py")
+version_file.write_text(f'__version__ = "{version}"\n', encoding="utf-8")
+print(f"[jhsrel] src/jarvis_hep_sampler/_version.py updated to {version}")
+PY
+}
+
+_jhsrel_upload() {
+  local verbose="${1:-0}"
+  local version="${2:-}"
+
+  if [[ "$verbose" -eq 1 ]]; then
+    echo "[jhsrel] Upload command: python3 -m twine upload -r pypi --verbose dist/*"
+    python3 -m twine upload -r pypi --verbose dist/*
+  else
+    echo "[jhsrel] Upload command: python3 -m twine upload -r pypi dist/*"
+    python3 -m twine upload -r pypi dist/*
+  fi
+
+  local status=$?
+  if [[ "$status" -ne 0 ]]; then
+    if [[ "$verbose" -eq 1 ]]; then
+      cat >&2 <<'EOF'
+[jhsrel] Upload failed.
+[jhsrel] The verbose twine output above contains PyPI's exact rejection reason.
+[jhsrel] Common 400 causes are a blocked/similar project name, an already-used
+[jhsrel] version/file, or server-side metadata policy. If PyPI says the project
+[jhsrel] name is too similar to an existing project, choose a less ambiguous
+[jhsrel] package name in pyproject.toml and rerun jhsrel with a fresh version.
+EOF
+    else
+      echo "[jhsrel] Upload failed. Rerun with '-v' for PyPI's full rejection details:" >&2
+      echo "[jhsrel]   jhsrel ${version:-<version>} -v" >&2
+    fi
+    return "$status"
+  fi
+}
+
+_jhsrel_verify_install() {
+  local expected_version="$1"
+
+  python3 - <<'PY' "$expected_version"
+import importlib.metadata as m
+import os
+import sys
+import tempfile
+
+expected = sys.argv[1]
+installed = m.version("Jarvis-HEP-Sampler")
+
+with tempfile.TemporaryDirectory() as tmp:
+    os.environ["JARVIS_SAMPLERS_HOME"] = os.path.join(tmp, "home")
+    import jarvis_hep_sampler
+    from jarvis_hep_sampler import SamplerRegistry, write_template
+    from jarvis_hep_sampler.testing import check_plugin
+
+    runtime = jarvis_hep_sampler.__version__
+    print("[jhsrel] installed version:", installed)
+    print("[jhsrel] runtime version:", runtime)
+    if installed != expected:
+        raise SystemExit(f"[jhsrel] Installed version mismatch: expected {expected}, got {installed}")
+    if runtime != expected:
+        raise SystemExit(f"[jhsrel] Runtime version mismatch: expected {expected}, got {runtime}")
+
+    path = write_template("ReleaseSmoke", tmp)
+    report = check_plugin(path, dimension=2)
+    if not report.ok:
+        raise SystemExit(f"[jhsrel] Template check failed: {report.rows()}")
+    entry = SamplerRegistry().load(path).entry
+    print("[jhsrel] template check passed; registry load:", entry.snapshot)
+
+matches = []
+for d in m.distributions():
+    name = (d.metadata.get("Name") or "").lower()
+    if name in {"jarvis-hep-sampler", "jarvis_hep_sampler"}:
+        matches.append((d.metadata.get("Name"), d.version, str(d.locate_file(""))))
+if matches:
+    print("[jhsrel] discovered Jarvis-HEP-Sampler distributions:")
+    for name, version, loc in matches:
+        print(f"  - {name} {version} @ {loc}")
+PY
+}
+
+jhsrel() {
+  (
+    set -euo pipefail
+
+    if [[ $# -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+      _jhsrel_usage
+      exit 0
+    fi
+
+    if [[ $# -lt 1 ]]; then
+      _jhsrel_usage
+      exit 2
+    fi
+
+    local version="$1"; shift || true
+    local upload_verbose=0
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "[jhsrel] Invalid version: $version (expected X.Y.Z)" >&2
+      exit 2
+    fi
+
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        -v|--verbose)
+          upload_verbose=1
+          ;;
+        *)
+          echo "[jhsrel] Unknown argument: $1" >&2
+          _jhsrel_usage
+          exit 2
+          ;;
+      esac
+      shift
+    done
+
+    cd "$_jhsrel_DIR"
+    if [[ ! -f "pyproject.toml" ]]; then
+      echo "[jhsrel] pyproject.toml not found in $_jhsrel_DIR" >&2
+      exit 2
+    fi
+
+    echo "[jhsrel] Release target version: $version"
+    echo "[jhsrel] Repository: pypi"
+    if [[ "$upload_verbose" -eq 1 ]]; then
+      echo "[jhsrel] Upload verbosity: verbose"
+    else
+      echo "[jhsrel] Upload verbosity: normal"
+    fi
+    echo "[jhsrel] Working directory: $(pwd)"
+    echo "[jhsrel] Python: $(python3 -V 2>/dev/null || true)"
+
+    echo "[jhsrel] Step 1/5: bump version"
+    _jhsrel_bump_version "$version"
+
+    echo "[jhsrel] Step 2/5: clean build artifacts"
+    _jhsrel_clean_artifacts
+    _jhsrel_clean_local_junk
+    _jhsrel_prune_installed_metadata
+
+    echo "[jhsrel] Step 3/5: build package"
+    python3 -m pip install --disable-pip-version-check -q -U build twine
+    python3 -m build
+    python3 -m twine check dist/*
+
+    echo "[jhsrel] Step 4/5: local editable install/verify"
+    _jhsrel_install_editable
+    _jhsrel_verify_install "$version"
+
+    echo "[jhsrel] Step 5/5: upload"
+    _jhsrel_upload "$upload_verbose" "$version"
+
+    echo "[jhsrel] Done."
+  )
+}
+
+_jhsrel_sourced=0
+if [[ -n "${BASH_VERSION:-}" ]]; then
+  [[ "${BASH_SOURCE[0]}" != "$0" ]] && _jhsrel_sourced=1
+elif [[ -n "${ZSH_VERSION:-}" ]]; then
+  case "${ZSH_EVAL_CONTEXT:-}" in
+    *:file) _jhsrel_sourced=1 ;;
+  esac
+fi
+
+if [[ "$_jhsrel_sourced" -eq 0 ]]; then
+  echo "This file defines the 'jhsrel' bash function. Please source it first:" >&2
+  echo "  source \"$0\"" >&2
+  exit 1
+fi
