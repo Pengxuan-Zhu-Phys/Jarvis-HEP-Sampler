@@ -12,6 +12,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from difflib import get_close_matches
 from types import MappingProxyType
 from typing import Any
 
@@ -189,11 +190,31 @@ def schema_issues(
     from jsonschema import Draft202012Validator
 
     validator = Draft202012Validator(dict(schema))
-    issues = [
-        OptionIssue(tuple(error.absolute_path), error.message)
-        for error in validator.iter_errors(thaw_options(options))
-    ]
+    issues: list[OptionIssue] = []
+    for error in validator.iter_errors(thaw_options(options)):
+        path = tuple(error.absolute_path)
+        if error.validator == "additionalProperties" and isinstance(error.instance, Mapping):
+            # Report each unknown key at its own path, with the closest known name.
+            issues.extend(_unknown_keys(error.instance, error.schema, path))
+        else:
+            issues.append(OptionIssue(path, error.message))
     return sorted(issues, key=lambda issue: (tuple(map(str, issue.path)), issue.message))
+
+
+def _unknown_keys(
+    instance: Mapping[str, Any], schema: Mapping[str, Any], path: tuple[str | int, ...]
+) -> list[OptionIssue]:
+    known = [str(name) for name in (schema.get("properties") or {})]
+    patterns = [re.compile(text) for text in (schema.get("patternProperties") or {})]
+    issues = []
+    for key in instance:
+        if key in known or any(pattern.search(key) for pattern in patterns):
+            continue
+        close = get_close_matches(key, known, n=1)
+        hint = f"; did you mean {close[0]!r}?" if close else ""
+        listed = f" (known options: {', '.join(known)})" if known and not close else ""
+        issues.append(OptionIssue((*path, key), f"unknown option {key!r}{hint}{listed}"))
+    return issues
 
 
 __all__ = [

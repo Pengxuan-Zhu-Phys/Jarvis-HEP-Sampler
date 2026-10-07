@@ -81,10 +81,11 @@ def test_schema_issues_locate_the_option():
             "additionalProperties": False,
         }
     )
-    issues = schema_issues(schema, freeze_options({"upper": 2, "uper": 1}))
-    locations = [issue.location() for issue in issues]
-    assert "Bounds.upper" in locations
-    assert any("uper" in issue.message for issue in issues)
+    issues = schema_issues(schema, freeze_options({"upper": 2, "uper": 1, "zzz": 0}))
+    by_location = {issue.location(): issue.message for issue in issues}
+    assert set(by_location) == {"Bounds.upper", "Bounds.uper", "Bounds.zzz"}
+    assert by_location["Bounds.uper"] == "unknown option 'uper'; did you mean 'upper'?"
+    assert by_location["Bounds.zzz"] == "unknown option 'zzz' (known options: upper)"
     assert schema_issues(None, freeze_options({"anything": 1})) == []
 
 

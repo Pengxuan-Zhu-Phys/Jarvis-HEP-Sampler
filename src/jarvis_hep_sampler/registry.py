@@ -318,7 +318,13 @@ class SamplerRegistry:
         return store
 
     def _write_store(self, store: Mapping[str, Any]) -> None:
-        text = json.dumps(store, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+        # Entries are sorted by method name; everything inside an entry keeps its
+        # order, so an OPTIONS_SCHEMA lists its options as the author wrote them.
+        ordered = {
+            "version": store["version"],
+            "entries": dict(sorted(store["entries"].items())),
+        }
+        text = json.dumps(ordered, indent=2, ensure_ascii=False) + "\n"
         _atomic_write_bytes(self.store_path, text.encode("utf-8"))
 
     def _delete_snapshot(self, snapshot: str, entries: Mapping[str, Any]) -> None:

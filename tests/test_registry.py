@@ -157,3 +157,15 @@ def test_registry_module_does_not_import_numpy_or_jsonschema():
         [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
     ).stdout.split()
     assert output == ["False", "False"]
+
+
+def test_schema_option_order_is_preserved(write_plugin):
+    path = write_plugin(
+        UNIFORM
+        + "\nOPTIONS_SCHEMA = {'type': 'object', 'properties': "
+        "{'zeta': {'type': 'number'}, 'alpha': {'type': 'number'}}}\n",
+        "Ordered.py",
+    )
+    SamplerRegistry().load(path)
+    stored = SamplerRegistry().get("Uniform").options_schema
+    assert list(stored["properties"]) == ["zeta", "alpha"]
