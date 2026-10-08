@@ -1,13 +1,17 @@
 # Development
 
+After source changes, rebuild and verify the complete package before testing an installation:
+
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install pytest ruff
+release_dir="$(mktemp -d)"
+./jhsrel --output "$release_dir"
+python -m pip install --force-reinstall "$release_dir/"*.whl
 python -m pytest
 ruff check .
-python -m build
 ```
 
-Tests set `JARVIS_SAMPLERS_HOME` to a temporary directory (`tests/conftest.py`), so they never touch `~/.jarvis/samplers`.
+The helper runs all SDK tests against the installed wheel in a separate fresh venv. Reinstalling the complete wheel makes local tests use the new implementation as well. Tests isolate `JARVIS_SAMPLERS_HOME` and never touch the user's registration.
 
 ## Layout
 
@@ -43,9 +47,9 @@ Tests set `JARVIS_SAMPLERS_HOME` to a temporary directory (`tests/conftest.py`),
 | `Jarvis sampler list` / `info` / `remove` | `SamplerRegistry().entries()`, `.source_state(entry)`, `.problems(entry)`, `.remove(method)` |
 | Layered sampler catalog | `SamplerRegistry().entries()`, cached on `.signature()` |
 | `Jarvis validate` | `split_bounds`, `parse_reserved`, `schema_issues(entry.options_schema, freeze_options(options))` |
-| Run preflight | `SamplerRegistry().load_snapshot(method)` or `load_plugin_file(<scan copy>)`, then `IndependentSession.from_bounds(...).prepare()` |
+| Run preflight | `load_plugin_source(<verified bytes>)` from the registry or scan binding, then `IndependentSession.from_bounds(...).prepare()` |
 | `PluginSampler` adapter | `session.point(i)`, `session.settings_rows()` / `summary_rows()` / `stop_reason()` / `status()`, with `SamplerLog(method, <HEP backend>)` |
-| Adapter tests | `testing.reference_stream(...)` as the expected `(candidate, accepted, u)` sequence |
+| Adapter tests | `reference_stream` for wiring; an analytic indexed sequence for independent correctness evidence |
 | Scan identity | `STREAM_PROTOCOL`, `PLUGIN` metadata, `thaw_options(session.options)` |
 
 The design record is `docs/jarvis-hep-sampler/technical-design.md` in the Jarvis-HEP repository.

@@ -7,20 +7,23 @@ Jarvis-HEP remains responsible for the `Jarvis sampler` CLI, task-card validatio
 ## Workflow
 
 1. Create a branch for the change.
-2. Install development dependencies:
+2. Build and install the complete package:
 
    ```bash
-   python -m pip install -e ".[dev]"
+   ./jhsrel
+   python -m pip install dist/0.1.0/*.whl
    ```
 
 3. Make the smallest practical change.
 4. Add or update tests for behavior changes.
-5. Run the checks:
+5. Rebuild, install and run the checks after changing source:
 
    ```bash
+   release_dir="$(mktemp -d)"
+   ./jhsrel --output "$release_dir"
+   python -m pip install --force-reinstall "$release_dir/"*.whl
    ruff check .
    python -m pytest
-   python -m build
    ```
 
 ## Coding Style

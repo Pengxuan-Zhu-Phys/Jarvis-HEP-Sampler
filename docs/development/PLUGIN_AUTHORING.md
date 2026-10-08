@@ -27,7 +27,7 @@ You may import any library installed in your environment. Missing imports fail a
 | --- | --- | --- |
 | `api_version` | yes | `1` |
 | `method` | yes | The `Sampling.Method` name. It must look like a built-in name: an upper-case letter, then 1–63 letters or digits (`MyLatinHypercube`). It cannot be a built-in name, in any letter case |
-| `version` | yes | Your version string. Change it whenever the algorithm changes meaning. Strict version/configuration checks on resume are planned for S2; start a new scan after science changes in the current development build |
+| `version` | yes | Your version string. Change it whenever the algorithm changes meaning. HEP checks saved version/configuration on resume; start a new scan after science changes |
 | `profile` | yes | `"independent"`. `"generational"` is reserved for feedback samplers in a later release |
 | `description` | no | One line, shown by `Jarvis man` and `Jarvis sampler list` |
 | `statistical` | no | `True` turns on the same Mapper warnings as the statistical built-in methods. It does not make your points posterior samples |
@@ -75,7 +75,7 @@ Use the `rng` you are given; do not use `np.random.*` global functions, time or 
 - `draw_block` gets one that depends only on `(seed, block_index)`.
 - `prepare` uses `setup.rng()`.
 
-For a deterministic plan, points are the same whatever the number of Workers, batch size or completion order. Replaying the same source and configuration reproduces the indexed stream within the same environment; the current HEP development adapter does not yet enforce every resume precondition (S2).
+For a deterministic plan, points are the same whatever the number of Workers, batch size or completion order. Replaying the same source and configuration reproduces the indexed stream within the same environment; the sampler-enabled HEP branch checks configuration, checkpoint identity and the full bound source hash before recovery. Reloading or removing the user registration does not change an existing scan.
 
 `prepare` runs again on resume, so the plan must follow from `setup` alone. Module-level state is allowed but outside this guarantee. `Jarvis sampler check` catches the common case of drawing from an unseeded global generator.
 
@@ -114,7 +114,7 @@ Your own exception is chained to these, so its traceback reaches the log. A fail
 
 The registry belongs to your user account on one machine. Load the plug-in on every machine that runs the card.
 
-## Operational limits in the S1 development build
+## Operational limits
 
 A snapshot fixes only this Python entry file. Install any packages it imports in the same environment as Jarvis-HEP. Sibling modules and data files are not copied, and `__file__` points at the snapshot during a real run. The independent profile does not use Worker feedback; points may still be correlated, as in LHS or a low-discrepancy design.
 
@@ -124,4 +124,4 @@ Schemas are optional. When supplied, local `$defs`/`$ref` references are support
 
 Reporting hooks are optional. Jarvis-HEP logs explicit options without them, with bounded display (32 rows, 256 characters per cell); a hook can show defaults or derived values. `status` runs on the sampling thread and is cached for monitor/heartbeat readers. Keep it quick and read-only with respect to `plan`; repeated errors are logged once per hook per session, with bounded error retention. A hanging user function has no enforced timeout.
 
-Strict resume identity, persistent source binding, project packing and feedback/generational execution remain later milestones. The complete user workflow is documented in the Jarvis-Books TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler**.
+Default strict resume and project source packing are implemented in the sampler-enabled HEP branch. Changing source during an existing scan, promotion to other built-in methods, and feedback/generational execution remain later milestones. Cross-version numerical identity is not promised; changed SDK/Python/NumPy versions produce a warning. The complete user workflow is documented in the Jarvis-Books TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler**.

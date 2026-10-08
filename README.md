@@ -2,7 +2,7 @@
 
 Jarvis-HEP-Sampler is the plug-in SDK for user-defined samplers in the Jarvis ecosystem.
 
-A user writes a sampler as one Python file, loads it once, and from then on uses it in a task card exactly like a built-in method. No Jarvis-HEP source code is changed. The plug-in's points go through the same Redis queue, logging and monitor as built-in samplers. Strict plug-in resume safety and project packing remain S2 work; do not treat the current prototype resume path as a reproducibility guarantee.
+A user writes a sampler as one Python file, loads it once, and from then on uses it in a task card exactly like a built-in method. No Jarvis-HEP source code is changed. The plug-in's points go through the same Redis queue, logging and monitor as built-in samplers. The sampler-enabled HEP branch binds each scan to an exact source snapshot and checks scientific settings before resume. Project packages include the source and its full hash; fetch verifies it and prints a load command.
 
 ```text
 Jarvis sampler init MyLatinHypercube       # fixed template -> ./MyLatinHypercube.py
@@ -40,13 +40,14 @@ Jarvis-HEP owns the runtime:
 
 This package never imports Jarvis-HEP, Redis or Portal.
 
-## Development install
+## Complete package installation
 
 The first PyPI release is pending. Install your local checkout before installing the sampler-enabled Jarvis-HEP branch:
 
 ```bash
 cd Jarvis-HEP-Sampler
-python -m pip install -e .
+./jhsrel
+python -m pip install dist/0.1.0/*.whl
 ```
 
 Dependencies: NumPy and jsonschema. Published Jarvis-HEP versions that support samplers will install the SDK as a dependency.
@@ -119,12 +120,18 @@ SamplerRegistry().load(path)                             # Jarvis sampler load
 
 ## Development
 
+After source changes, rebuild and verify the complete package before testing an installation:
+
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install pytest ruff
+release_dir="$(mktemp -d)"
+./jhsrel --output "$release_dir"
+python -m pip install --force-reinstall "$release_dir/"*.whl
 python -m pytest
 ruff check .
-python -m build
 ```
+
+The helper runs all SDK tests against the installed wheel in a separate fresh venv. Reinstalling the complete wheel makes local tests use the new implementation as well. Tests isolate `JARVIS_SAMPLERS_HOME` and never touch the user's registration.
 
 ## Documentation
 
@@ -137,4 +144,16 @@ python -m build
 
 ## Status
 
-Alpha. API version 1 is frozen for the `independent` and `generational` profiles. This release runs `independent` plug-ins; `generational` (feedback samplers) arrives in a later release.
+Alpha. API version 1 supports the independent execution contract; generational metadata reserves a future profile, whose running state/feedback contract remains under design. This release runs `independent` plug-ins; `generational` (feedback samplers) arrives in a later release.
+
+## Complete package release
+
+Run `./jhsrel` (or source it and call `jhsrel`) to build one complete wheel and
+source distribution, install all declared dependencies in a fresh virtual environment,
+run the installed SDK smoke and full SDK tests, and write checksums plus
+`release-verification.json` under `dist/<version>/`. There are no dependency extras
+or editable installation paths. Build/test tools do not change the shipped library.
+
+`./jhsrel X.Y.Z --upload` updates the two version files and uploads only after
+verification. Omit `--upload` to prepare locally. Pass `--output DIR` to select an
+empty artifact directory. No upload is performed during implementation.

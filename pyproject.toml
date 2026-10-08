@@ -28,13 +28,6 @@ dependencies = [
   "jsonschema>=4.18",
 ]
 
-[project.optional-dependencies]
-dev = [
-  "build>=1.2.0",
-  "pytest>=8.0.0",
-  "ruff>=0.6.0",
-  "twine>=5.0.0",
-]
 
 [project.urls]
 Homepage = "https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP-Sampler"
@@ -50,7 +43,6 @@ jarvis_hep_sampler = ["py.typed", "templates/*.tmpl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100

@@ -1,54 +1,34 @@
 # Release
 
-Do not publish from a development session unless the task is the release itself. Normal development stops after a local build check.
+The same complete wheel and source distribution are used for development, CI and users. Dependency extras and editable installations are not supported. Test/build tools are installed separately and do not create a second package variant.
 
-## Versions
+## Version and compatibility
 
-The package version lives in two places, which a test keeps equal:
+The distribution version appears in `pyproject.toml` and `src/jarvis_hep_sampler/_version.py`. The helper updates both when given an explicit X.Y.Z argument. API version 1, stream protocol 1 and registry format 1 are separate contracts. The sampler-enabled Jarvis-HEP currently requires `Jarvis-HEP-Sampler>=0.1.0,<0.2`; widening that range requires compatibility evidence.
 
-- `pyproject.toml`
-- `src/jarvis_hep_sampler/_version.py`
+Publish the SDK before a HEP release that depends on it. This repository has not been uploaded during the implementation work.
 
-These are separate from the package version:
-
-- **API version** (`API_VERSION`): what a plug-in file must contain. It is 1 and frozen.
-- **Stream protocol** (`STREAM_PROTOCOL`): how random streams are derived. It is 1. Changing it changes every point of every plug-in, so it needs a design decision first.
-- **Registry version**: the format of `sources.json`. It is 1.
-
-Jarvis-HEP depends on `Jarvis-HEP-Sampler>=0.1`. Raise that floor in Jarvis-HEP when it starts using a new SDK feature.
-
-## Build Checklist
+## Prepare complete artifacts
 
 ```bash
-python -m pip install -e ".[dev]"
-ruff check .
-python -m pytest
-python -m build
-twine check dist/*
+./jhsrel
+# Or choose a new version and a fresh destination:
+./jhsrel 0.1.1 --output dist/0.1.1
+python -m pip install dist/0.1.1/*.whl
 ```
 
-## Local release helper
+The helper can also be sourced in Bash or Zsh, then called as `jhsrel`. Without `--upload` it only prepares locally. `--dry` is a compatibility alias for this default and cannot be combined with `--upload`.
+
+It snapshots tracked files from the current checkout, including current edits. Add intended new files to Git before preparing a release; unrelated untracked files are excluded. It builds the sdist and a wheel from that sdist in an isolated build environment, checks both with Twine, installs the complete wheel and every declared dependency in a new venv, runs `pip check`, and verifies imports originate inside that venv. It exercises template generation, the checker in another process and the registry, then runs all SDK tests against the installed wheel from outside the checkout. No sibling source tree or PYTHONPATH is used.
+
+Artifacts are copied to `dist/<version>/` only after verification succeeds, together with `SHA256SUMS` and `release-verification.json`. The latter records artifact hashes and installed dependency versions. Existing distributions are never overwritten: use a new empty `--output` directory for another attempt. `--python /path/to/python` selects the test interpreter. Check `ruff check .` before releasing; Linux/macOS and Python 3.10–3.13 CI install the same complete wheel. CI configuration is not evidence that the remote matrix has run.
+
+## Publish explicitly
 
 ```bash
-source ./jhsrel
-jhsrel 0.1.1
-jhsrel 0.1.1 -v
+./jhsrel 0.1.1 --output dist/0.1.1-publish --upload
 ```
 
-`jhsrel` does the following, then uploads with `twine upload -r pypi`:
+Only this explicit flag uploads, after all local checks pass. Set the usual Twine token environment variables or keyring credentials; no credentials belong in Git. The helper uses noninteractive Twine upload and propagates errors. A version already present on PyPI requires a new version, not replacement of published files.
 
-1. updates both version files;
-2. cleans build artifacts;
-3. builds and checks the distributions;
-4. reinstalls the package in editable mode;
-5. verifies the installed and runtime versions;
-6. checks a generated template and loads it into a temporary registry.
-
-## GitHub Release Process
-
-1. Confirm CI passes on the release commit.
-2. Tag the commit `vX.Y.Z` and push the tag.
-3. Draft a GitHub release with short notes: changed behavior, compatibility, known limits.
-4. Publish the release. `.github/workflows/publish.yml` checks that the tag, `pyproject.toml` and `_version.py` agree, runs the tests, builds, and publishes through PyPI Trusted Publishing (`environment: pypi`).
-
-Trusted Publishing must be set up once on PyPI for the `Jarvis-HEP-Sampler` project, and a `pypi` environment must exist in the GitHub repository.
+Alternatively, publish a GitHub release tagged `vX.Y.Z`. The publish workflow checks the tag and both version files, runs this same complete-package helper, and publishes only the wheel/sdist through PyPI Trusted Publishing. Configure the `pypi` environment and trusted publisher on PyPI beforehand. Local preparation does not create tags, push commits, or publish a GitHub release.
