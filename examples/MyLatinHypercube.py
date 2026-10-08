@@ -1,14 +1,14 @@
 """Latin hypercube design: one point per stratum in every variable.
 
-Load it with ``Jarvis sampler load examples/LatinHypercube.py`` and write
-``Sampling.Method: LatinHypercube`` in a task card.
+Load it with ``Jarvis sampler load examples/MyLatinHypercube.py`` and write
+``Sampling.Method: MyLatinHypercube`` in a task card.
 """
 
 import numpy as np
 
 PLUGIN = {
     "api_version": 1,
-    "method": "LatinHypercube",
+    "method": "MyLatinHypercube",
     "version": "0.1.0",
     "profile": "independent",
     "description": "Latin hypercube design with point_number strata per variable.",

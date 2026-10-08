@@ -2,17 +2,17 @@
 
 Jarvis-HEP-Sampler is the plug-in SDK for user-defined samplers in the Jarvis ecosystem.
 
-A user writes a sampler as one Python file, loads it once, and from then on uses it in a task card exactly like a built-in method. No Jarvis-HEP source code is changed. The plug-in's points go through the same Redis queue, logging, monitor, checkpoint and resume machinery as `Random` or `Bridson`.
+A user writes a sampler as one Python file, loads it once, and from then on uses it in a task card exactly like a built-in method. No Jarvis-HEP source code is changed. The plug-in's points go through the same Redis queue, logging and monitor as built-in samplers. Strict plug-in resume safety and project packing remain S2 work; do not treat the current prototype resume path as a reproducibility guarantee.
 
 ```text
-Jarvis sampler init LatinHypercube       # fixed template -> ./LatinHypercube.py
+Jarvis sampler init MyLatinHypercube       # fixed template -> ./MyLatinHypercube.py
 #   edit draw() (and optionally OPTIONS_SCHEMA)
-Jarvis sampler check LatinHypercube.py   # optional offline check, no Redis
-Jarvis sampler load LatinHypercube.py    # snapshot into ~/.jarvis/samplers; reloading replaces it
-Jarvis run task.yaml                     # Sampling.Method: LatinHypercube
+Jarvis sampler check MyLatinHypercube.py   # optional offline check, no Redis
+Jarvis sampler load MyLatinHypercube.py    # snapshot into ~/.jarvis/samplers; reloading replaces it
+Jarvis run task.yaml                     # Sampling.Method: MyLatinHypercube
 ```
 
-The `Jarvis sampler` commands are part of Jarvis-HEP and use this package. Until they ship, the same steps are available from Python (see [Python API](#python-api)).
+The `Jarvis sampler` commands are part of Jarvis-HEP and use this package. They are available in the sampler-enabled Jarvis-HEP development branch. The SDK also supports offline Python use (see [Python API](#python-api)).
 
 ## Scope
 
@@ -40,13 +40,18 @@ Jarvis-HEP owns the runtime:
 
 This package never imports Jarvis-HEP, Redis or Portal.
 
-## Quick Install
+## Development install
+
+The first PyPI release is pending. Install your local checkout before installing the sampler-enabled Jarvis-HEP branch:
 
 ```bash
-pip install Jarvis-HEP-Sampler
+cd Jarvis-HEP-Sampler
+python -m pip install -e .
 ```
 
-Dependencies: NumPy and jsonschema. Jarvis-HEP installs this package for you.
+Dependencies: NumPy and jsonschema. Published Jarvis-HEP versions that support samplers will install the SDK as a dependency.
+
+The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
 ## A plug-in
 
@@ -57,7 +62,7 @@ import numpy as np
 
 PLUGIN = {
     "api_version": 1,
-    "method": "LatinHypercube",
+    "method": "MyLatinHypercube",
     "version": "0.1.0",
     "profile": "independent",
 }
@@ -83,7 +88,7 @@ def draw(context, rng, plan):
 
 ```yaml
 Sampling:
-  Method: LatinHypercube
+  Method: MyLatinHypercube
   Variables:
     - name: mass
       distribution: {type: Flat, parameters: {min: 100.0, max: 1000.0}}
@@ -101,7 +106,7 @@ The full contract is in [Plug-in authoring](docs/development/PLUGIN_AUTHORING.md
 from jarvis_hep_sampler import SamplerRegistry, write_template
 from jarvis_hep_sampler.testing import check_plugin, run_offline
 
-path = write_template("LatinHypercube")                  # Jarvis sampler init
+path = write_template("MyLatinHypercube")                  # Jarvis sampler init
 report = check_plugin(path, dimension=2, options={})     # Jarvis sampler check
 for name, result in report.rows():
     print(f"{name:14} {result}")

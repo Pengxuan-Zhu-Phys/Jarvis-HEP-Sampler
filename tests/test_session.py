@@ -29,6 +29,22 @@ def make(write_plugin, body: str, extra: str = "", **kwargs):
     return session
 
 
+def test_repeated_hook_errors_are_bounded_and_logged_once(write_plugin, caplog):
+    session = make(write_plugin, '''
+def draw(context, rng, plan):
+    return rng.random(context.dimension)
+def status(plan, stats):
+    raise ValueError(str(stats.candidates) + "x" * 10000)
+''')
+    session.prepare()
+    with caplog.at_level(logging.WARNING):
+        for candidate in range(1000):
+            assert session.status(session.stats(candidate, 0)) == {}
+    assert len(session.hook_errors) == 1
+    assert len(session.hook_errors[0]) <= 512
+    assert len([r for r in caplog.records if "could not report status" in r.message]) == 1
+
+
 def test_prepare_runs_once_and_plan_reaches_draw(write_plugin):
     body = """
 CALLS = []

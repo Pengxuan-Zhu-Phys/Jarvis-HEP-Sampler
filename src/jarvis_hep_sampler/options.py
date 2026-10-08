@@ -188,16 +188,28 @@ def schema_issues(
     if schema is None:
         return []
     from jsonschema import Draft202012Validator
+    from referencing import Registry
+    from referencing.exceptions import NoSuchResource, Unresolvable
 
-    validator = Draft202012Validator(dict(schema))
+    def offline_reference(uri: str):
+        # A schema is stored alongside its plug-in metadata. Validation must
+        # work offline and must never fetch another document implicitly.
+        raise NoSuchResource(ref=uri)
+
+    validator = Draft202012Validator(dict(schema), registry=Registry(retrieve=offline_reference))
     issues: list[OptionIssue] = []
-    for error in validator.iter_errors(thaw_options(options)):
-        path = tuple(error.absolute_path)
-        if error.validator == "additionalProperties" and isinstance(error.instance, Mapping):
-            # Report each unknown key at its own path, with the closest known name.
-            issues.extend(_unknown_keys(error.instance, error.schema, path))
-        else:
-            issues.append(OptionIssue(path, error.message))
+    try:
+        for error in validator.iter_errors(thaw_options(options)):
+            path = tuple(error.absolute_path)
+            if error.validator == "additionalProperties" and isinstance(error.instance, Mapping):
+                issues.extend(_unknown_keys(error.instance, error.schema, path))
+            else:
+                issues.append(OptionIssue(path, error.message))
+    except Unresolvable as exc:
+        issues.append(OptionIssue(
+            (), f"cannot resolve OPTIONS_SCHEMA reference {exc.ref!r}; "
+            "use definitions in the same schema document (offline validation)",
+        ))
     return sorted(issues, key=lambda issue: (tuple(map(str, issue.path)), issue.message))
 
 

@@ -41,6 +41,8 @@ from jarvis_hep_sampler.streams import block_stream, candidate_stream
 
 STATUS_MAX_KEYS = 8
 STATUS_MAX_TEXT = 32
+HOOK_ERROR_LIMIT = 16
+HOOK_ERROR_MAX_TEXT = 512
 DEFAULT_STOP_REASON = "point_number reached"
 
 
@@ -80,6 +82,7 @@ class IndependentSession:
             log=self.log,
         )
         self.hook_errors: list[str] = []
+        self._failed_hooks: set[str] = set()
         self._plan: Any = None
         self._prepared = False
         self._block: tuple[int, np.ndarray] | None = None
@@ -318,8 +321,14 @@ class IndependentSession:
             return default
 
     def _hook_failed(self, name: str, detail: str) -> None:
-        message = f"{self.method} Sampler could not report {name}: {detail}"
-        self.hook_errors.append(message)
+        # Keep one warning per hook per session, even if its exception text
+        # changes at every candidate. Reporting must not grow with the scan.
+        if name in self._failed_hooks:
+            return
+        self._failed_hooks.add(name)
+        message = f"{self.method} Sampler could not report {name}: {detail}"[:HOOK_ERROR_MAX_TEXT]
+        if len(self.hook_errors) < HOOK_ERROR_LIMIT:
+            self.hook_errors.append(message)
         self.log.warning(message)
 
 

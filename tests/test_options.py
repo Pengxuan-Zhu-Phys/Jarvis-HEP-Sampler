@@ -93,3 +93,15 @@ def test_schema_issues_locate_the_option():
 def test_invalid_schemas_fail_at_load(schema):
     with pytest.raises(PluginLoadError):
         check_options_schema(schema)
+
+
+def test_local_schema_reference_and_offline_failures():
+    schema = {"type": "object", "$defs": {"value": {"type": "number", "maximum": 1}},
+              "properties": {"upper": {"$ref": "#/$defs/value"}}}
+    assert schema_issues(schema, freeze_options({"upper": .5})) == []
+    assert schema_issues(schema, freeze_options({"upper": 2}))[0].path == ("upper",)
+    for reference in ("#/$defs/missing", "https://example.invalid/schema.json"):
+        broken = {"$ref": reference}
+        issues = schema_issues(broken, freeze_options({}))
+        assert len(issues) == 1
+        assert "offline validation" in issues[0].message

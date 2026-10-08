@@ -1,8 +1,9 @@
 """Offline driver and conformance checks (technical design §5.1 ``check``, §9.1).
 
 Nothing here needs Redis or Jarvis-HEP. :func:`check_plugin` is what
-``Jarvis sampler check`` runs; :func:`reference_stream` is the oracle that
-Jarvis-HEP's adapter tests compare a real scan against.
+``Jarvis sampler check`` runs; :func:`reference_stream` supplies a stream that
+Jarvis-HEP's adapter tests compare a real scan against. It shares the session
+implementation and is not an independent proof of random-stream correctness.
 
 Selection here acts on unit-cube points. In a real scan Jarvis-HEP applies
 ``Sampling.selection`` to the mapped physical values; the index bookkeeping
@@ -11,6 +12,11 @@ is the same.
 
 from __future__ import annotations
 
+import base64
+import json
+import subprocess
+import sys
+import tempfile
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -20,8 +26,9 @@ from typing import Any
 import numpy as np
 
 from jarvis_hep_sampler.errors import PluginError
-from jarvis_hep_sampler.loader import LoadedPlugin, load_plugin_file
+from jarvis_hep_sampler.loader import LoadedPlugin, load_plugin_file, load_plugin_source
 from jarvis_hep_sampler.log import SamplerLog
+from jarvis_hep_sampler.options import thaw_options
 from jarvis_hep_sampler.session import IndependentSession
 
 Selection = Callable[[np.ndarray], bool]
@@ -270,30 +277,31 @@ def check_plugin(
 
     try:
         again = _session(
-            loaded, seed=seed, point_number=point_number, names=names, options=options, log=log
+            load_plugin_source(loaded.source_bytes, origin=loaded.source_path),
+            seed=seed, point_number=point_number, names=names, options=options, log=log
         )
         second = np.array([u for _, u in again.points()])
         same = np.array_equal(first, second)
     except PluginError as exc:
         same, detail = False, str(exc)
     else:
-        detail = "same seed gives identical points" if same else "same seed gave different points"
+        detail = (
+            "fresh import with the same seed gives identical points"
+            if same else "fresh import with the same seed gave different points"
+        )
     items.append(CheckItem("repeatability", same, detail))
     if not same:
         return report(meta.method)
 
     middle = point_number // 2
     try:
-        restarted = _session(
-            loaded, seed=seed, point_number=point_number, names=names, options=options, log=log
-        )
-        tail = np.array([u for _, u in restarted.points(middle)])
+        tail = _process_restart(loaded, session, middle)
         resumed = np.array_equal(tail, first[middle:])
-    except PluginError as exc:
+    except (PluginError, OSError, ValueError) as exc:
         resumed, detail = False, str(exc)
     else:
         detail = (
-            f"restart at candidate {middle} reproduces the stream"
+            f"fresh process at candidate {middle} reproduces the stream"
             if resumed
             else f"restart at candidate {middle} gave different points"
         )
@@ -310,6 +318,30 @@ def check_plugin(
         present = [name for name in loaded.hooks if name not in {"prepare", "draw", "draw_block"}]
         items.append(CheckItem("hooks", True, ", ".join(present) if present else "none defined"))
     return report(meta.method)
+
+
+def _process_restart(plugin: LoadedPlugin, session: IndependentSession, start: int) -> np.ndarray:
+    """Replay pinned source bytes in a new interpreter, preserving __file__."""
+    with tempfile.TemporaryDirectory(prefix="jhs-check-") as directory:
+        config = Path(directory) / "config.json"
+        output = Path(directory) / "tail.npy"
+        config.write_text(json.dumps({
+            "source": base64.b64encode(plugin.source_bytes).decode("ascii"),
+            "origin": str(plugin.source_path),
+            "seed": session.seed,
+            "point_number": session.point_number,
+            "variable_names": session.setup.variable_names,
+            "options": thaw_options(session.options),
+            "start": start,
+        }), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "jarvis_hep_sampler._check_restart", str(config), str(output)],
+            capture_output=True, text=True, check=False,
+        )
+        if result.returncode:
+            detail = (result.stderr or result.stdout).strip()[-4096:]
+            raise PluginError(f"fresh-process check failed (exit {result.returncode}): {detail}")
+        return np.load(output, allow_pickle=False)
 
 
 def assert_conforms(plugin: PluginLike, **kwargs: Any) -> CheckReport:

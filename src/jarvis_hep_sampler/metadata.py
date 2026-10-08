@@ -44,7 +44,7 @@ def check_method_name(name: object, *, reserved_names: Iterable[str] = ()) -> st
     if not isinstance(name, str) or not METHOD_NAME_RE.match(name):
         raise PluginLoadError(
             f"method name {name!r} must start with an upper-case letter and use "
-            "2-64 letters or digits, like the built-in methods (e.g. LatinHypercube)"
+            "2-64 letters or digits, like the built-in methods (e.g. MyLatinHypercube)"
         )
     folded = name.casefold()
     for reserved in reserved_names:

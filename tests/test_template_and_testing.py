@@ -55,7 +55,7 @@ def test_generated_template_conforms(tmp_path):
 @pytest.mark.parametrize("centered", [False, True])
 def test_latin_hypercube_example(centered):
     run = run_offline(
-        EXAMPLES / "LatinHypercube.py",
+        EXAMPLES / "MyLatinHypercube.py",
         variable_names=["mass", "coupling", "mixing"],
         point_number=200,
         seed=7,
@@ -66,7 +66,7 @@ def test_latin_hypercube_example(centered):
         assert sorted(column) == list(range(200))
     assert run.settings_rows == [("centered", centered)]
     assert run.stop_reason == "point_number reached"
-    assert_conforms(EXAMPLES / "LatinHypercube.py", dimension=2, options={"centered": centered})
+    assert_conforms(EXAMPLES / "MyLatinHypercube.py", dimension=2, options={"centered": centered})
 
 
 def test_reference_stream_with_selection_and_resume(uniform_plugin):
@@ -143,6 +143,42 @@ def test_check_reports_load_errors(tmp_path: Path):
     report = check_plugin(tmp_path / "missing.py", dimension=1)
     assert [item.name for item in report.items] == ["load"]
     assert not report.ok
+
+
+def test_check_reimports_module_constants(write_plugin):
+    path = write_plugin('''
+import numpy as np
+PLUGIN = {"api_version":1,"method":"ImportRandom","version":"1","profile":"independent"}
+OFFSET = np.random.default_rng().random()
+def draw(context, rng, plan):
+    return [OFFSET] * context.dimension
+''', "ImportRandom.py")
+    report = check_plugin(path, dimension=1, point_number=5)
+    assert [item.name for item in report.failures()] == ["repeatability"]
+
+
+def test_check_uses_a_fresh_interpreter(write_plugin):
+    path = write_plugin('''
+import os
+PLUGIN = {"api_version":1,"method":"ProcessLocal","version":"1","profile":"independent"}
+def draw(context, rng, plan):
+    return [os.getpid() / 1e9] * context.dimension
+''', "ProcessLocal.py")
+    report = check_plugin(path, dimension=1, point_number=5)
+    assert [item.name for item in report.failures()] == ["resume"]
+
+
+def test_block_points_have_an_independent_indexed_reference(write_plugin):
+    path = write_plugin('''
+PLUGIN = {"api_version":1,"method":"IndexedBlock","version":"1",
+          "profile":"independent","block_size":4}
+def draw_block(context, rng, plan):
+    return [[(context.block_index * context.block_size + row) / context.point_number]
+            for row in range(context.block_size)]
+''', "IndexedBlock.py")
+    assert_conforms(path, dimension=1, point_number=11)
+    actual = run_offline(path, dimension=1, point_number=11)
+    assert np.array_equal(actual.points[:, 0], np.arange(11) / 11)
 
 
 def test_check_blocked_plugin(blocked_plugin):
