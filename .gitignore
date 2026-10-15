@@ -8,8 +8,6 @@ __pycache__/
 .coverage
 htmlcov/
 
-github.ci/
-
 # Build
 build/
 dist/
@@ -19,6 +17,22 @@ wheelhouse/
 .venv/
 venv/
 env/
+
+# Local release helper
+/jhsrel
+/scripts/
+
+# Development records
+/CONTRIBUTING.md
+/docs/development/DEVELOPMENT.md
+/docs/development/DEVELOPMENT_LEDGER.md
+/docs/development/M1_VERIFICATION.md
+/docs/development/M2_VERIFICATION.md
+/docs/release/
+
+# Maintainer automation
+/.github/
+/github.ci/
 
 # OS / editors
 .DS_Store
