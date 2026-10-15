@@ -172,6 +172,10 @@ The helper runs all SDK tests against the installed wheel in a separate fresh ve
 
 Alpha. API version 1 supports the independent execution contract; generational metadata reserves a future profile, whose running state/feedback contract remains under design. This release runs `independent` plug-ins; `generational` (feedback samplers) arrives in a later release.
 
+## License
+
+MIT. See [LICENSE](LICENSE). Copyright (c) 2026 Pengxuan Zhu.
+
 ## Complete package release
 
 Run `./jhsrel` (or source it and call `jhsrel`) to build one complete wheel and
