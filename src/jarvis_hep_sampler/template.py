@@ -1,4 +1,4 @@
-"""The fixed plug-in template behind ``Jarvis sampler init`` (technical design §5.5)."""
+"""The fixed plug-in template behind ``jsampler init`` (technical design §5.5)."""
 
 from __future__ import annotations
 

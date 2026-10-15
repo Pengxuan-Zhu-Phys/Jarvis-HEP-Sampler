@@ -2,7 +2,7 @@
 
 :class:`IndependentSession` is the single implementation of the independent
 profile. The offline driver (:mod:`jarvis_hep_sampler.testing`) and the
-Jarvis-HEP adapter both use it, so ``Jarvis sampler check`` and a real scan
+Jarvis-HEP adapter both use it, so ``jsampler check`` and a real scan
 produce the same points.
 
 The session owns: option checks, ``validate_options``, ``prepare``, the

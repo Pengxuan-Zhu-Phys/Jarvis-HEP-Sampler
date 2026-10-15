@@ -2,9 +2,9 @@
 
 A plug-in is one ``.py`` file with a ``PLUGIN`` dict, an optional
 ``OPTIONS_SCHEMA`` and a few functions (``prepare`` / ``draw`` / hooks).
-Users create it with ``jsampler init`` (or ``Jarvis sampler init``), load it
-once, and then write ``Sampling.Method: <Name>`` like any built-in method.
-``Jarvis sampler`` is the same command as ``jsampler``.
+Users create it with ``jsampler init``, load it once, and then write
+``Sampling.Method: <Name>`` like any built-in method. ``jsampler`` only sees
+samplers in this package's registry.
 
 This package owns the plug-in format: metadata rules, loading, the user
 registry, random streams, output checks, the logging facade and the offline

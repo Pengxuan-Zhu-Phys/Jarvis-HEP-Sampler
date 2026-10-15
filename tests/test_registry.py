@@ -103,7 +103,7 @@ def test_broken_snapshots_are_reported(uniform_plugin):
     snapshot = registry.snapshot_path(entry)
     snapshot.write_text("# tampered\n" + snapshot.read_text())
     assert "does not match" in registry.problems(entry)[0]
-    with pytest.raises(RegistryError, match="Jarvis sampler load"):
+    with pytest.raises(RegistryError, match="jsampler load"):
         registry.load_snapshot("Uniform")
     snapshot.unlink()
     assert "missing" in registry.problems(entry)[0]
@@ -127,7 +127,7 @@ def test_remove(uniform_plugin):
     ("content", "message"),
     [
         ("{not json", "not valid JSON"),
-        ("[]", "not a Jarvis sampler registry"),
+        ("[]", "not a jsampler registry"),
         ('{"version": 9, "entries": {}}', "registry version 9"),
         ('{"version": 1, "entries": {"X": {"plugin": {}}}}', "malformed"),
     ],

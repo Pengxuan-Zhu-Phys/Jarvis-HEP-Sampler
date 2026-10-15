@@ -5,8 +5,8 @@ the recorded SHA-256 always matches the code that runs. ``sys.path`` is not
 touched; the module is registered under a private name derived from its path
 and content.
 
-Importing a plug-in runs user code. Only ``Jarvis sampler load`` / ``check``
-and the run preflight do it; ``Jarvis validate`` / ``man`` read the registry.
+Importing a plug-in runs user code. ``jsampler load`` and ``jsampler check``
+do it. Reading the registry does not.
 """
 
 from __future__ import annotations

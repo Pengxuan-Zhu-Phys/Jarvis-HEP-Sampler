@@ -1,6 +1,6 @@
 """The user sampler registry under ``~/.jarvis/samplers`` (technical design §5.2).
 
-``Jarvis sampler load`` snapshots a plug-in file into ``user_sources/`` and
+``jsampler load`` snapshots a plug-in file into ``user_sources/`` and
 records it in ``sources.json``, so every new terminal sees it without another
 load. Loading the same method again replaces the entry and deletes the old
 snapshot. Runs use the snapshot, never the user's working copy.
@@ -260,14 +260,14 @@ class SamplerRegistry:
             entry = self.get(method)
             if entry is None:
                 raise RegistryError(
-                    f"no sampler named {method!r} is loaded; run: Jarvis sampler load <file>",
+                    f"no sampler named {method!r} is loaded; run: jsampler load <file>",
                     method=str(method),
                 )
             try:
                 path, payload = self._read_snapshot(entry)
             except RegistryError as exc:
                 raise RegistryError(
-                    f"{exc.message}; run: Jarvis sampler load {entry.source_path}",
+                    f"{exc.message}; run: jsampler load {entry.source_path}",
                     method=entry.method,
                 ) from exc
         # User imports may take arbitrary time or use the registry themselves.
@@ -305,7 +305,7 @@ class SamplerRegistry:
                 if other != method and other.casefold() == method.casefold():
                     raise PluginLoadError(
                         f"{method} differs only in letter case from the loaded sampler {other}; "
-                        f"run: Jarvis sampler remove {other}",
+                        f"run: jsampler remove {other}",
                         method=method,
                     )
             replaced = (
@@ -363,7 +363,7 @@ class SamplerRegistry:
                 "the samplers again"
             ) from exc
         if not isinstance(store, dict) or not isinstance(store.get("entries"), dict):
-            raise RegistryError(f"{self.store_path} is not a Jarvis sampler registry")
+            raise RegistryError(f"{self.store_path} is not a jsampler registry")
         version = store.get("version")
         if version != REGISTRY_VERSION:
             raise RegistryError(

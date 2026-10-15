@@ -1,6 +1,6 @@
 # Plug-in authoring
 
-A sampler plug-in is one `.py` file. Start from the template (`jsampler init <Name>`), edit it, load it (`jsampler load <file>`), then write `Sampling.Method: <Name>` in a task card. `Jarvis sampler` is the same command.
+A sampler plug-in is one `.py` file. Start from the template (`jsampler init <Name>`), edit it, load it (`jsampler load <file>`), then write `Sampling.Method: <Name>` in a task card. `jsampler` only sees samplers loaded by this package.
 
 The plug-in only produces points in the unit cube. Jarvis-HEP maps them through `Variables` and `Mapper`, applies `selection`, and runs them through Workers. You never touch Sample objects, UUIDs, Redis or the DATABASE.
 
@@ -29,7 +29,7 @@ You may import any library installed in your environment. Missing imports fail a
 | `method` | yes | The `Sampling.Method` name. It must look like a built-in name: an upper-case letter, then 1–63 letters or digits (`MyLatinHypercube`). It cannot be a built-in name, in any letter case |
 | `version` | yes | Your version string. Change it whenever the algorithm changes meaning. HEP checks saved version/configuration on resume; start a new scan after science changes |
 | `profile` | yes | `"independent"`. `"generational"` is reserved for feedback samplers in a later release |
-| `description` | no | One line, shown by `Jarvis man` and `Jarvis sampler list` |
+| `description` | no | One line, shown by `jsampler info` and `Jarvis man` |
 | `statistical` | no | `True` turns on the same Mapper warnings as the statistical built-in methods. It does not make your points posterior samples |
 | `block_size` | no | Use `draw_block` with blocks of this size instead of `draw` |
 
@@ -77,7 +77,7 @@ Use the `rng` you are given; do not use `np.random.*` global functions, time or 
 
 For a deterministic plan, points are the same whatever the number of Workers, batch size or completion order. Replaying the same source and configuration reproduces the indexed stream within the same environment; the sampler-enabled HEP branch checks configuration, checkpoint identity and the full bound source hash before recovery. Reloading or removing the user registration does not change an existing scan.
 
-`prepare` runs again on resume, so the plan must follow from `setup` alone. Module-level state is allowed but outside this guarantee. `Jarvis sampler check` catches the common case of drawing from an unseeded global generator.
+`prepare` runs again on resume, so the plan must follow from `setup` alone. Module-level state is allowed but outside this guarantee. `jsampler check` catches the common case of drawing from an unseeded global generator.
 
 ## Logging and monitor
 
@@ -106,10 +106,10 @@ Your own exception is chained to these, so its traceback reaches the log. Output
 
 ## The registry
 
-`Jarvis sampler load` copies the file to `~/.jarvis/samplers/user_sources/<Method>-<hash>.py` and records it in `~/.jarvis/samplers/sources.json`. `JARVIS_SAMPLERS_HOME` moves that directory.
+`jsampler load` copies the file to `~/.jarvis/samplers/user_sources/<Method>-<hash>.py` and records it in `~/.jarvis/samplers/sources.json`. `JARVIS_SAMPLERS_HOME` moves that directory.
 
 - Runs use the copy, not your working file. Edit, then load again.
-- `Jarvis sampler list` marks a working file changed since the last load.
+- `jsampler list` marks a working file changed since the last load.
 - Loading the same method again replaces the entry and retires the old copy.
 - If removing a retired copy fails after the registration commits, the command
   still succeeds and reports a cleanup warning. Only explicitly retired copies
@@ -129,7 +129,7 @@ The registry belongs to your user account on one machine. Load the plug-in on ev
 
 A snapshot fixes only this Python entry file. Install any packages it imports in the same environment as Jarvis-HEP. Sibling modules and data files are not copied, and `__file__` points at the snapshot during a real run. The independent profile does not use Worker feedback; points may still be correlated, as in LHS or a low-discrepancy design.
 
-`Jarvis sampler check` executes the file, reimports the same source bytes, and restarts them in a fresh Python process to compare the tail. A successful check exercises this configuration; it does not prove the algorithm scientifically correct. `--card` preserves the card budget unless `--points` explicitly overrides it; this override changes the total design, rather than just the number of checked points.
+`jsampler check` executes the file, reimports the same source bytes, and restarts them in a fresh Python process to compare the tail. A successful check exercises this configuration; it does not prove the algorithm scientifically correct. `--card` preserves the card budget unless `--points` explicitly overrides it; this override changes the total design, rather than just the number of checked points.
 
 `Jarvis check` is the separate calculator smoke. It draws a few points through the loaded plug-in and the card's opera and likelihood. Its identity goes to `DATABASE/test/sampler_identity.json`, and its bound source and checkpoint go under `checkpoints/<scan>/<Method>/check/`. It does not read or replace the formal science database, bound source or resume checkpoint. `runtime.json`, logs and `run_summary` stay in the scan's ordinary files.
 

@@ -1,6 +1,6 @@
 """Latin hypercube design: one point per stratum in every variable.
 
-Load it with ``Jarvis sampler load examples/MyLatinHypercube.py`` and write
+Load it with ``jsampler load examples/MyLatinHypercube.py`` and write
 ``Sampling.Method: MyLatinHypercube`` in a task card.
 """
 

@@ -12,7 +12,7 @@ jsampler load MyLatinHypercube.py    # snapshot into ~/.jarvis/samplers; reloadi
 Jarvis run task.yaml                 # Sampling.Method: MyLatinHypercube
 ```
 
-`jsampler` is this package's command. `Jarvis sampler` is the same command inside Jarvis-HEP, the same way `Jarvis plot` is `jplot`. `jsampler -v` prints this package's version. The SDK also supports offline Python use (see [Python API](#python-api)).
+`jsampler` is this package's command. It only sees samplers loaded into `~/.jarvis/samplers`. `Jarvis sampler` is Jarvis-HEP's command and also knows the built-in methods. `jsampler -v` prints this package's version. The SDK also supports offline Python use (see [Python API](#python-api)).
 
 ## Scope
 
@@ -30,7 +30,7 @@ Jarvis-HEP-Sampler owns the plug-in format:
 
 Jarvis-HEP owns the runtime:
 
-- `Jarvis sampler`, which calls `jsampler`
+- `Jarvis sampler`, for built-in methods and loaded plug-ins
 - task-card validation
 - the run preflight
 - mapping unit-cube points to physical parameters, and `selection`
@@ -39,14 +39,14 @@ Jarvis-HEP owns the runtime:
 - the sampler log, telemetry and monitor
 - `Jarvis man` and project packing
 
-The library does not import Jarvis-HEP, Redis or Portal. `jsampler check --card` and built-in method names use Jarvis-HEP when it is installed.
+This package does not import Jarvis-HEP, Redis or Portal. `jsampler check --card` reads `Sampling.Variables` and `Sampling.Bounds` from the task YAML.
 
 ## Complete package installation
 
-Version 1.0.0. Install from PyPI:
+Version 1.0.1. Install from PyPI:
 
 ```bash
-python -m pip install "Jarvis-HEP-Sampler==1.0.0"
+python -m pip install "Jarvis-HEP-Sampler==1.0.1"
 ```
 
 From this repository:
@@ -55,7 +55,7 @@ From this repository:
 python -m pip install .
 ```
 
-Dependencies: NumPy and jsonschema. A sampler-enabled Jarvis-HEP installs this SDK with `Jarvis-HEP-Sampler>=1.0.0,<2`.
+Dependencies: NumPy, jsonschema and PyYAML. A sampler-enabled Jarvis-HEP installs this SDK with `Jarvis-HEP-Sampler>=1.0.0,<2`.
 
 The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
@@ -118,7 +118,7 @@ Jarvis check examples/MyLatinHypercube.task.yaml
 Jarvis run examples/MyLatinHypercube.task.yaml
 ```
 
-`jsampler check` and `Jarvis sampler check` are the same offline file check and do not require `load`. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
+`jsampler check` checks a sampler file, or a sampler already loaded by this package. A file does not need `load` first. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
 
 Reloading the same method updates future scans. Removing the registration
 preserves an existing scan's bound source and its normal `Jarvis run ... --resume`
@@ -130,15 +130,15 @@ workflow.
 from jarvis_hep_sampler import SamplerRegistry, write_template
 from jarvis_hep_sampler.testing import check_plugin, run_offline
 
-path = write_template("MyLatinHypercube")                  # Jarvis sampler init
-report = check_plugin(path, dimension=2, options={})     # Jarvis sampler check
+path = write_template("MyLatinHypercube")                  # jsampler init
+report = check_plugin(path, dimension=2, options={})     # jsampler check
 for name, result in report.rows():
     print(f"{name:14} {result}")
 
 run = run_offline(path, variable_names=["mass", "coupling"], point_number=1000, seed=7)
 print(run.points.shape, run.stop_reason)
 
-SamplerRegistry().load(path)                             # Jarvis sampler load
+SamplerRegistry().load(path)                             # jsampler load
 ```
 
 ## Documentation

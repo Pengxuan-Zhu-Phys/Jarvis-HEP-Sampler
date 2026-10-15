@@ -1,9 +1,8 @@
 """Offline driver and conformance checks (technical design §5.1 ``check``, §9.1).
 
 Nothing here needs Redis or Jarvis-HEP. :func:`check_plugin` is what
-``Jarvis sampler check`` runs; :func:`reference_stream` supplies a stream that
-Jarvis-HEP's adapter tests compare a real scan against. It shares the session
-implementation and is not an independent proof of random-stream correctness.
+``jsampler check`` runs. :func:`reference_stream` replays the same session a
+scan uses. It is not an independent proof of random-stream correctness.
 
 Selection here acts on unit-cube points. In a real scan Jarvis-HEP applies
 ``Sampling.selection`` to the mapped physical values; the index bookkeeping
@@ -176,7 +175,7 @@ class CheckItem:
 
 @dataclass(frozen=True)
 class CheckReport:
-    """What ``Jarvis sampler check`` prints."""
+    """What ``jsampler check`` prints."""
 
     method: str | None
     items: tuple[CheckItem, ...]

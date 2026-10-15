@@ -1,8 +1,7 @@
-"""``jsampler``: the Jarvis-HEP-Sampler command.
+"""``jsampler``: the command for samplers loaded by this package.
 
-``Jarvis sampler`` calls this same command with ``prog="Jarvis sampler"``.
-The library does not import Jarvis-HEP. Task cards and built-in method names
-are read from Jarvis-HEP only when that package is installed.
+It reads and writes the user registry. It does not know Jarvis-HEP's built-in
+methods. ``check --card`` reads Variables and Bounds from the task YAML.
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ _HELP_FLAGS = frozenset({"-h", "--help"})
 
 
 def build_parser(prog: str) -> argparse.ArgumentParser:
-    """The shared command surface for ``jsampler`` and ``Jarvis sampler``."""
+    """The ``jsampler`` command. ``prog`` is the name printed in help and errors."""
     parser = argparse.ArgumentParser(
         prog=prog,
         description=(
@@ -57,7 +56,7 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
     load = sub.add_parser("load", help="Load or replace a sampler for every new run")
     load.add_argument("file", help="Sampler .py file")
 
-    sub.add_parser("list", help="List loaded and shipped plug-in samplers")
+    sub.add_parser("list", help="List samplers loaded by this package")
 
     info = sub.add_parser("info", help="Show one loaded sampler")
     info.add_argument("method", help="Sampling.Method name")
@@ -121,32 +120,40 @@ def _table(title: str, rows: list[tuple[str, Any]]) -> None:
         print(f"  {str(key).ljust(width)}  {value}")
 
 
-def _reserved() -> frozenset[str]:
-    catalog = _catalog()
-    if catalog is None:
-        return frozenset()
-    return frozenset(catalog.reserved_method_names())
-
-
-def _catalog() -> Any | None:
-    try:
-        import jarvishep2.sampler_catalog as catalog
-    except ImportError:
-        return None
-    return catalog
-
-
 def _run_init(prog: str, method: str, output: str | None) -> int:
     from jarvis_hep_sampler import write_template
     from jarvis_hep_sampler.errors import PluginError
 
     try:
-        path = write_template(method, output, reserved_names=_reserved())
+        path = write_template(method, output)
     except (PluginError, FileExistsError) as exc:
         return _error(prog, str(exc))
     print(f"Created {path} from the independent sampler template.")
     print(f"Edit draw(), then run: {prog} load {path}")
     return EXIT_OK
+
+
+def _card_sampling(path: str) -> tuple[list[str], dict[str, Any]]:
+    """Variable names and ``Sampling.Bounds`` from a task YAML file."""
+    data = _load_yaml_mapping(path, "task card")
+    sampling = data.get("Sampling") or {}
+    if not isinstance(sampling, Mapping):
+        raise ValueError("Sampling must be a mapping")
+    raw_variables = sampling.get("Variables") or []
+    if not isinstance(raw_variables, list):
+        raise ValueError("Sampling.Variables must be a list")
+    names: list[str] = []
+    for index, item in enumerate(raw_variables):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"Sampling.Variables[{index}] must be a mapping")
+        name = str(item.get("name", "")).strip()
+        if not name:
+            raise ValueError(f"Sampling.Variables[{index}].name is required")
+        names.append(name)
+    bounds = sampling.get("Bounds") or {}
+    if not isinstance(bounds, Mapping):
+        raise ValueError("Sampling.Bounds must be a mapping")
+    return names, dict(bounds)
 
 
 def _load_yaml_mapping(path: str, what: str) -> Mapping[str, Any]:
@@ -165,13 +172,9 @@ def _check_target(target: str) -> str | None:
     from jarvis_hep_sampler import SamplerRegistry
 
     entry = SamplerRegistry().get(target)
-    if entry is not None:
-        return str(SamplerRegistry().snapshot_path(entry))
-    catalog = _catalog()
-    if catalog is None:
+    if entry is None:
         return None
-    record = catalog.plugin_record(target)
-    return record.snapshot_path if record is not None else None
+    return str(SamplerRegistry().snapshot_path(entry))
 
 
 def _run_check(prog: str, args: Any) -> int:
@@ -189,14 +192,7 @@ def _run_check(prog: str, args: Any) -> int:
     overrides: list[str] = []
     try:
         if args.card:
-            try:
-                from jarvishep2.sampling.variables import load_variables
-                from jarvishep2.task_config import load_task_yaml
-            except ImportError:
-                return _error(prog, f"{prog} check --card needs Jarvis-HEP")
-            config = load_task_yaml(args.card)
-            variable_names = [variable.name for variable in load_variables(config)]
-            bounds = dict((config.get("Sampling") or {}).get("Bounds") or {})
+            variable_names, bounds = _card_sampling(args.card)
             reserved, options = split_bounds(bounds)
             settings = parse_reserved(reserved)
             seed = settings.seed
@@ -230,7 +226,6 @@ def _run_check(prog: str, args: Any) -> int:
         variable_names=variable_names,
         dimension=dimension,
         options=options,
-        reserved_names=() if target != args.target else _reserved(),
     )
     _table(f"{report.method or args.target} check ->", report.rows())
     return EXIT_OK if report.ok else EXIT_RUN_FAILED
@@ -241,7 +236,7 @@ def _run_load(prog: str, file: str) -> int:
     from jarvis_hep_sampler.errors import PluginError
 
     try:
-        result = SamplerRegistry().load(file, reserved_names=_reserved())
+        result = SamplerRegistry().load(file)
     except PluginError as exc:
         print(f"{_prefix(prog)} Cannot load {file}: {exc}", file=sys.stderr)
         cause = exc.__cause__
@@ -269,9 +264,7 @@ def _run_load(prog: str, file: str) -> int:
     return EXIT_OK
 
 
-def _status(registry: Any, entry: Any, reserved: frozenset[str]) -> str:
-    if entry.method.casefold() in {name.casefold() for name in reserved}:
-        return "shadowed by a built-in method"
+def _status(registry: Any, entry: Any) -> str:
     problems = registry.problems(entry)
     if problems:
         return f"broken: {problems[0]}"
@@ -294,24 +287,16 @@ def _run_list(prog: str) -> int:
 
     registry = SamplerRegistry()
     rows: list[tuple[str, str, str, str, str]] = []
-    catalog = _catalog()
-    if catalog is not None:
-        for spec in catalog.builtin_plugin_specs():
-            record = catalog.plugin_record(spec.name)
-            rows.append((
-                spec.name, record.version if record else "", "independent", "shipped", "ok",
-            ))
     try:
         entries = registry.entries()
     except RegistryError as exc:
         _print_rows(rows)
         print(f"{_prefix(prog)} {exc}", file=sys.stderr)
         return EXIT_RUN_FAILED
-    reserved = _reserved()
     for method, entry in entries.items():
         rows.append((
             method, entry.version, entry.profile, entry.source_path,
-            _status(registry, entry, reserved),
+            _status(registry, entry),
         ))
     _print_rows(rows)
     print(f"Registry: {registry.home}")
@@ -321,39 +306,10 @@ def _run_list(prog: str) -> int:
 def _run_info(prog: str, method: str) -> int:
     from jarvis_hep_sampler import SamplerRegistry
 
-    catalog = _catalog()
-    record = catalog.plugin_record(method) if catalog is not None else None
-    spec_name = None
-    if catalog is not None:
-        spec = catalog.spec_for(method)
-        spec_name = spec.name if spec is not None else None
     registry = SamplerRegistry()
     entry = registry.get(method)
-    if record is None and entry is None:
-        return _error(prog, f"no plug-in sampler named {method!r}; see: {prog} list")
-    if record is not None:
-        rows: list[tuple[str, Any]] = [
-            ("version", record.version),
-            ("profile", record.profile),
-            ("description", record.description or "—"),
-            ("statistical", "yes" if record.statistical else "no"),
-            ("options schema", "yes" if record.options_schema is not None else "no"),
-            ("functions", ", ".join(record.hooks)),
-            ("source", record.source_path),
-        ]
-        user = getattr(catalog, "SOURCE_USER", "user")
-        if record.source == user:
-            rows += [
-                ("snapshot", record.snapshot_path),
-                ("sha256", record.source_sha256),
-                ("loaded at", record.loaded_at),
-                ("status", _status(registry, entry, _reserved()) if entry else "missing"),
-            ]
-        else:
-            rows.append(("status", "shipped with Jarvis-HEP"))
-        _table(f"Sampler {spec_name or method} ->", rows)
-        return EXIT_OK
-    assert entry is not None
+    if entry is None:
+        return _error(prog, f"no loaded sampler named {method!r}; see: {prog} list")
     _table(f"Sampler {entry.method} ->", [
         ("version", entry.version),
         ("profile", entry.profile),
@@ -365,7 +321,7 @@ def _run_info(prog: str, method: str) -> int:
         ("snapshot", registry.snapshot_path(entry)),
         ("sha256", entry.source_sha256),
         ("loaded at", entry.loaded_at),
-        ("status", _status(registry, entry, _reserved())),
+        ("status", _status(registry, entry)),
     ])
     return EXIT_OK
 
@@ -374,8 +330,6 @@ def _run_remove(prog: str, method: str, *, yes: bool) -> int:
     from jarvis_hep_sampler import SamplerRegistry
     from jarvis_hep_sampler.errors import RegistryError
 
-    if method.casefold() in {name.casefold() for name in _reserved()}:
-        return _error(prog, f"{method} is a built-in method and cannot be removed")
     registry = SamplerRegistry()
     if not yes:
         if not sys.stdin.isatty():
