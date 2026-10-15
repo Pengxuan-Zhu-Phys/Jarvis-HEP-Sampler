@@ -1,6 +1,6 @@
 # Plug-in authoring
 
-A sampler plug-in is one `.py` file. Start from the template (`Jarvis sampler init <Name>`), edit it, load it (`Jarvis sampler load <file>`), then write `Sampling.Method: <Name>` in a task card.
+A sampler plug-in is one `.py` file. Start from the template (`jsampler init <Name>`), edit it, load it (`jsampler load <file>`), then write `Sampling.Method: <Name>` in a task card. `Jarvis sampler` is the same command.
 
 The plug-in only produces points in the unit cube. Jarvis-HEP maps them through `Variables` and `Mapper`, applies `selection`, and runs them through Workers. You never touch Sample objects, UUIDs, Redis or the DATABASE.
 

@@ -26,7 +26,11 @@ classifiers = [
 dependencies = [
   "numpy>=1.24",
   "jsonschema>=4.18",
+  "PyYAML>=6.0",
 ]
+
+[project.scripts]
+jsampler = "jarvis_hep_sampler.cli:main"
 
 
 [project.urls]

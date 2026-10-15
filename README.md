@@ -5,14 +5,14 @@ Jarvis-HEP-Sampler is the plug-in SDK for user-defined samplers in the Jarvis ec
 A user writes a sampler as one Python file, loads it once, and from then on uses it in a task card exactly like a built-in method. No Jarvis-HEP source code is changed. The plug-in's points go through the same Redis queue, logging and monitor as built-in samplers. The sampler-enabled HEP branch binds each scan to an exact source snapshot and checks scientific settings before resume. Project packages include the source and its full hash; fetch verifies it and prints a load command.
 
 ```text
-Jarvis sampler init MyLatinHypercube       # fixed template -> ./MyLatinHypercube.py
+jsampler init MyLatinHypercube       # fixed template -> ./MyLatinHypercube.py
 #   edit draw() (and optionally OPTIONS_SCHEMA)
-Jarvis sampler check MyLatinHypercube.py   # optional offline check, no Redis
-Jarvis sampler load MyLatinHypercube.py    # snapshot into ~/.jarvis/samplers; reloading replaces it
-Jarvis run task.yaml                     # Sampling.Method: MyLatinHypercube
+jsampler check MyLatinHypercube.py   # optional offline check, no Redis
+jsampler load MyLatinHypercube.py    # snapshot into ~/.jarvis/samplers; reloading replaces it
+Jarvis run task.yaml                 # Sampling.Method: MyLatinHypercube
 ```
 
-The `Jarvis sampler` commands are part of Jarvis-HEP and use this package. They are available in the sampler-enabled Jarvis-HEP development branch. The SDK also supports offline Python use (see [Python API](#python-api)).
+`jsampler` is this package's command. `Jarvis sampler` is the same command inside Jarvis-HEP, the same way `Jarvis plot` is `jplot`. `jsampler -v` prints this package's version. The SDK also supports offline Python use (see [Python API](#python-api)).
 
 ## Scope
 
@@ -26,10 +26,11 @@ Jarvis-HEP-Sampler owns the plug-in format:
 - the output contract (shape, real, finite, inside `[0, 1]`)
 - the `log` facade handed to plug-ins
 - the offline driver and conformance checks
+- the `jsampler` command
 
 Jarvis-HEP owns the runtime:
 
-- the `Jarvis sampler` CLI
+- `Jarvis sampler`, which calls `jsampler`
 - task-card validation
 - the run preflight
 - mapping unit-cube points to physical parameters, and `selection`
@@ -38,7 +39,7 @@ Jarvis-HEP owns the runtime:
 - the sampler log, telemetry and monitor
 - `Jarvis man` and project packing
 
-This package never imports Jarvis-HEP, Redis or Portal.
+The library does not import Jarvis-HEP, Redis or Portal. `jsampler check --card` and built-in method names use Jarvis-HEP when it is installed.
 
 ## Complete package installation
 
@@ -110,14 +111,14 @@ A complete runnable card is provided in
 It uses Jarvis-HEP's bundled Eggbox demonstration operator:
 
 ```bash
-Jarvis sampler check examples/MyLatinHypercube.py --card examples/MyLatinHypercube.task.yaml
-Jarvis sampler load examples/MyLatinHypercube.py
+jsampler check examples/MyLatinHypercube.py --card examples/MyLatinHypercube.task.yaml
+jsampler load examples/MyLatinHypercube.py
 Jarvis validate examples/MyLatinHypercube.task.yaml
 Jarvis check examples/MyLatinHypercube.task.yaml
 Jarvis run examples/MyLatinHypercube.task.yaml
 ```
 
-`Jarvis sampler check` is the offline file check and does not require `load`. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
+`jsampler check` and `Jarvis sampler check` are the same offline file check and do not require `load`. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
 
 Reloading the same method updates future scans. Removing the registration
 preserves an existing scan's bound source and its normal `Jarvis run ... --resume`
