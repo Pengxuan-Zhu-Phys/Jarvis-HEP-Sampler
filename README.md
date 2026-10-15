@@ -48,12 +48,10 @@ Version 1.0.0. Install from PyPI:
 python -m pip install "Jarvis-HEP-Sampler==1.0.0"
 ```
 
-The same complete wheel can be built locally:
+From this repository:
 
 ```bash
-cd Jarvis-HEP-Sampler
-./jhsrel 1.0.0
-python -m pip install dist/1.0.0/*.whl
+python -m pip install .
 ```
 
 Dependencies: NumPy and jsonschema. A sampler-enabled Jarvis-HEP installs this SDK with `Jarvis-HEP-Sampler>=1.0.0,<2`.
@@ -121,10 +119,9 @@ Jarvis run examples/MyLatinHypercube.task.yaml
 
 `Jarvis sampler check` is the offline file check and does not require `load`. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
 
-Run this example with the sampler check-isolation fixes described in the
-[development ledger](docs/development/DEVELOPMENT_LEDGER.md). Reloading the same
-method updates future scans; removing the registration preserves existing scans'
-bound source and their normal `Jarvis run ... --resume` workflow.
+Reloading the same method updates future scans. Removing the registration
+preserves an existing scan's bound source and its normal `Jarvis run ... --resume`
+workflow.
 
 ## Python API
 
@@ -143,30 +140,9 @@ print(run.points.shape, run.stop_reason)
 SamplerRegistry().load(path)                             # Jarvis sampler load
 ```
 
-## Development
-
-After source changes, rebuild and verify the complete package before testing an installation:
-
-```bash
-python -m pip install pytest ruff
-release_dir="$(mktemp -d)"
-./jhsrel --output "$release_dir"
-python -m pip install --force-reinstall "$release_dir/"*.whl
-python -m pytest
-ruff check .
-```
-
-The helper runs all SDK tests against the installed wheel in a separate fresh venv. Reinstalling the complete wheel makes local tests use the new implementation as well. Tests isolate `JARVIS_SAMPLERS_HOME` and never touch the user's registration.
-
 ## Documentation
 
-- [Docs index](docs/README.md)
 - [Plug-in authoring](docs/development/PLUGIN_AUTHORING.md)
-- [Development](docs/development/DEVELOPMENT.md)
-- [Development ledger](docs/development/DEVELOPMENT_LEDGER.md)
-- [Release](docs/release/RELEASE.md)
-- [Contributing](CONTRIBUTING.md)
-- Design record: `docs/jarvis-hep-sampler/technical-design.md` in the Jarvis-HEP repository
 
 ## Status
 
@@ -175,15 +151,3 @@ Alpha. API version 1 supports the independent execution contract; generational m
 ## License
 
 MIT. See [LICENSE](LICENSE). Copyright (c) 2026 Pengxuan Zhu.
-
-## Complete package release
-
-Run `./jhsrel` (or source it and call `jhsrel`) to build one complete wheel and
-source distribution, install all declared dependencies in a fresh virtual environment,
-run the installed SDK smoke and full SDK tests, and write checksums plus
-`release-verification.json` under `dist/<version>/`. There are no dependency extras
-or editable installation paths. Build/test tools do not change the shipped library.
-
-`./jhsrel X.Y.Z --upload` updates the two version files and uploads only after
-verification. Omit `--upload` to prepare locally. Pass `--output DIR` to select an
-empty artifact directory. No upload is performed during implementation.
