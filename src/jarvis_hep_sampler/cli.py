@@ -7,7 +7,9 @@ methods. ``check --card`` reads Variables and Bounds from the task YAML.
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import shutil
 import sys
 from collections.abc import Mapping
 from contextvars import ContextVar
@@ -16,6 +18,7 @@ from typing import Any
 
 from rich import box
 from rich.console import Console, Group
+from rich.padding import Padding
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -39,10 +42,154 @@ def _json_options() -> argparse.ArgumentParser:
     return parent
 
 
+class _Parser(argparse.ArgumentParser):
+    """Argparse parser whose help and usage errors use Jarvis rich panels."""
+
+    def format_help(self) -> str:
+        if _json():
+            return json.dumps(
+                _help_document(self), indent=2, sort_keys=True, ensure_ascii=False,
+            ) + "\n"
+        buffer = io.StringIO()
+        width = max(80, shutil.get_terminal_size().columns)
+        console = Console(
+            file=buffer,
+            highlight=False,
+            force_terminal=sys.stdout.isatty(),
+            width=width,
+        )
+        _render_help(self, console)
+        return buffer.getvalue()
+
+    def error(self, message: str) -> None:
+        if _json():
+            _print_json({
+                "error": {"message": message},
+                "ok": False,
+                "usage": self.format_usage().strip(),
+            })
+        else:
+            Console(stderr=True, highlight=False).print(Panel(
+                Group(Text(message), Text(""), Text(self.format_usage().strip(), style="dim")),
+                title=Text(self.prog, style="bold"),
+                border_style="red",
+                box=box.ROUNDED,
+                padding=(0, 1),
+            ))
+        self.exit(EXIT_USAGE)
+
+
+def _metavar(action: argparse.Action) -> str:
+    if action.metavar is not None:
+        if isinstance(action.metavar, tuple):
+            return " ".join(action.metavar)
+        return str(action.metavar)
+    if action.type is int:
+        return "INTEGER"
+    return action.dest.upper()
+
+
+def _help_document(parser: argparse.ArgumentParser) -> dict[str, Any]:
+    arguments: list[dict[str, str]] = []
+    options: list[dict[str, Any]] = []
+    commands: list[dict[str, str]] = []
+    for action in parser._actions:
+        if action.help == argparse.SUPPRESS:
+            continue
+        if isinstance(action, argparse._SubParsersAction):
+            descriptions = {
+                choice.dest: choice.help or ""
+                for choice in getattr(action, "_choices_actions", [])
+            }
+            commands.extend(
+                {"help": descriptions.get(name, ""), "name": name} for name in action.choices
+            )
+            continue
+        if action.option_strings:
+            options.append({
+                "help": action.help or "",
+                "metavar": None if action.nargs == 0 else _metavar(action),
+                "names": list(action.option_strings),
+            })
+        elif action.dest not in {"help", "sampler_command"}:
+            arguments.append({
+                "help": action.help or "",
+                "metavar": _metavar(action),
+                "name": action.dest,
+            })
+    return {
+        "arguments": arguments,
+        "commands": commands,
+        "description": parser.description or "",
+        "options": options,
+        "prog": parser.prog,
+        "usage": parser.format_usage().strip(),
+    }
+
+
+def _help_panel(console: Console, title: str, rows: list[tuple[Text, Text, str]]) -> None:
+    if not rows:
+        return
+    table = Table(
+        show_header=False,
+        expand=True,
+        box=None,
+        pad_edge=False,
+        padding=(0, 1),
+        highlight=False,
+    )
+    table.add_column(width=24, no_wrap=True)
+    table.add_column(width=6, no_wrap=True)
+    table.add_column(ratio=1)
+    for primary, alias, help_text in rows:
+        table.add_row(primary, alias, help_text)
+    console.print(Panel(
+        table, title=title, title_align="left", border_style="dim", padding=(0, 1),
+    ))
+
+
+def _render_help(parser: argparse.ArgumentParser, console: Console) -> None:
+    document = _help_document(parser)
+    usage = str(document["usage"]).removeprefix("usage:").strip()
+    line = Text()
+    line.append("usage: ", style="yellow")
+    line.append(usage, style="bold")
+    console.print(Padding(line, 1))
+    if document["description"]:
+        console.print(Padding(Text(str(document["description"])), (0, 1, 1, 1)))
+    arguments = [
+        (
+            Text(item["name"], style="bold cyan"),
+            Text(item["metavar"], style="bold yellow"),
+            item["help"],
+        )
+        for item in document["arguments"]
+    ]
+    options = []
+    for item in document["options"]:
+        longs = [name for name in item["names"] if name.startswith("--")]
+        shorts = [name for name in item["names"] if not name.startswith("--")]
+        label = ",".join(longs or shorts)
+        if item["metavar"]:
+            label = f"{label} {item['metavar']}"
+        options.append((
+            Text(label, style="bold cyan"),
+            Text(",".join(shorts if longs else []), style="bold cyan"),
+            item["help"],
+        ))
+    commands = [
+        (Text(item["name"], style="bold cyan"), Text(""), item["help"])
+        for item in document["commands"]
+    ]
+    _help_panel(console, "Arguments", arguments)
+    _help_panel(console, "Options", options)
+    _help_panel(console, "Commands", commands)
+
+
 def build_parser(prog: str) -> argparse.ArgumentParser:
     """The ``jsampler`` command. ``prog`` is the name printed in help and errors."""
     options = _json_options()
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         parents=[options],
         prog=prog,
         description=(
@@ -57,13 +204,25 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         action="store_true",
         help="Print the Jarvis-HEP-Sampler version",
     )
-    sub = parser.add_subparsers(dest="sampler_command", required=False)
+    sub = parser.add_subparsers(
+        dest="sampler_command", required=False, parser_class=_Parser,
+    )
 
-    init = sub.add_parser("init", parents=[options], help="Create a sampler file from the template")
+    init = sub.add_parser(
+        "init",
+        parents=[options],
+        help="Create a sampler file from the template",
+        description="Create a sampler file from the template",
+    )
     init.add_argument("method", help="Sampling.Method name, e.g. MyLatinHypercube")
     init.add_argument("--output", help="File or directory to write (default ./<Method>.py)")
 
-    check = sub.add_parser("check", parents=[options], help="Check a sampler offline (no Redis)")
+    check = sub.add_parser(
+        "check",
+        parents=[options],
+        help="Check a sampler offline (no Redis)",
+        description="Check a sampler offline (no Redis)",
+    )
     check.add_argument("target", help="Sampler file, or the name of a loaded sampler")
     context = check.add_mutually_exclusive_group()
     context.add_argument("--dimension", type=int, help="Number of variables (default 2)")
@@ -75,17 +234,33 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
     check.add_argument("--seed", type=int, help="Seed (default: the card's, else 0)")
 
     load = sub.add_parser(
-        "load", parents=[options], help="Load or replace a sampler for every new run",
+        "load",
+        parents=[options],
+        help="Load or replace a sampler for every new run",
+        description="Load or replace a sampler for every new run",
     )
     load.add_argument("file", help="Sampler .py file")
 
-    sub.add_parser("list", parents=[options], help="List samplers loaded by this package")
+    sub.add_parser(
+        "list",
+        parents=[options],
+        help="List samplers loaded by this package",
+        description="List samplers loaded by this package",
+    )
 
-    info = sub.add_parser("info", parents=[options], help="Show one loaded sampler")
+    info = sub.add_parser(
+        "info",
+        parents=[options],
+        help="Show one loaded sampler",
+        description="Show one loaded sampler",
+    )
     info.add_argument("method", help="Sampling.Method name")
 
     remove = sub.add_parser(
-        "remove", parents=[options], help="Unload a sampler (your file is kept)",
+        "remove",
+        parents=[options],
+        help="Unload a sampler (your file is kept)",
+        description="Unload a sampler (your file is kept)",
     )
     remove.add_argument("method", help="Sampling.Method name")
     remove.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
@@ -96,21 +271,21 @@ def main(argv: list[str] | None = None, *, prog: str = "jsampler") -> int:
     """Run ``jsampler``. ``argv`` defaults to ``sys.argv[1:]``."""
     args = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser(prog)
-    if not args or args[0] in _HELP_FLAGS:
-        parser.print_help()
-        return EXIT_OK
-    if any(arg in _HELP_FLAGS for arg in args):
-        try:
-            parser.parse_args(args)
-        except SystemExit as exc:
-            return int(exc.code or EXIT_OK)
-        return EXIT_OK
-    try:
-        parsed = parser.parse_args(args)
-    except SystemExit as exc:
-        return int(exc.code or EXIT_USAGE)
     token = _AS_JSON.set("--json" in args)
     try:
+        if not args or args[0] in _HELP_FLAGS:
+            parser.print_help()
+            return EXIT_OK
+        if any(arg in _HELP_FLAGS for arg in args):
+            try:
+                parser.parse_args(args)
+            except SystemExit as exc:
+                return int(exc.code or EXIT_OK)
+            return EXIT_OK
+        try:
+            parsed = parser.parse_args(args)
+        except SystemExit as exc:
+            return int(exc.code or EXIT_USAGE)
         return _dispatch(prog, parser, parsed)
     finally:
         _AS_JSON.reset(token)
@@ -118,10 +293,7 @@ def main(argv: list[str] | None = None, *, prog: str = "jsampler") -> int:
 
 def _dispatch(prog: str, parser: argparse.ArgumentParser, parsed: Any) -> int:
     if parsed.version:
-        if _json():
-            _print_json({"package": "Jarvis-HEP-Sampler", "version": __version__})
-        else:
-            print(f"Jarvis-HEP-Sampler {__version__}")
+        print(f"Jarvis-HEP-Sampler {__version__}")
         return EXIT_OK
     command = parsed.sampler_command
     if command == "init":
@@ -163,7 +335,13 @@ def _error(prog: str, message: str, *, command: str | None = None, code: int = E
             payload["command"] = command
         _print_json(payload)
     else:
-        print(f"{_prefix(prog)} {message}", file=sys.stderr)
+        Console(stderr=True, highlight=False).print(Panel(
+            Text(message),
+            title=Text(_prefix(prog).strip("[]"), style="bold"),
+            border_style="red",
+            box=box.ROUNDED,
+            padding=(0, 1),
+        ))
     return code
 
 
@@ -510,7 +688,7 @@ def _run_remove(prog: str, method: str, *, yes: bool) -> int:
             )
         answer = input(f"Remove sampler {method} from {registry.home}? [y/N] ").strip().lower()
         if answer not in {"y", "yes"}:
-            print("Nothing removed.")
+            _panel("Remove", [("result", "Nothing removed.")], border="dim")
             return EXIT_OK
     try:
         removed = registry.remove(method)

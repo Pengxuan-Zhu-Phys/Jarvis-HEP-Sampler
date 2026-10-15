@@ -15,11 +15,39 @@ from jarvis_hep_sampler.cli import main
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_help_uses_rich_panels(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-h"]) == 0
+    out = capsys.readouterr().out
+    assert "Commands" in out and "init" in out and "╭" in out
+    assert main(["check", "-h"]) == 0
+    assert "Arguments" in capsys.readouterr().out
+    assert main(["--json", "-h"]) == 0
+    raw = capsys.readouterr().out
+    assert "╭" not in raw
+    document = json.loads(raw)
+    names = {item["name"] for item in document["commands"]}
+    assert names == {"init", "check", "load", "list", "info", "remove"}
+    assert any("--json" in item["names"] for item in document["options"])
+    assert main(["check", "--json", "-h"]) == 0
+    check_help = json.loads(capsys.readouterr().out)
+    assert any(item["name"] == "target" for item in check_help["arguments"])
+    assert any("--card" in item["names"] for item in check_help["options"])
+
+
 def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-v"]) == 0
     assert capsys.readouterr().out.strip() == f"Jarvis-HEP-Sampler {__version__}"
-    assert main(["--version"], prog="Jarvis sampler") == 0
+    assert main(["--version", "--json"], prog="Jarvis sampler") == 0
     assert capsys.readouterr().out.strip() == f"Jarvis-HEP-Sampler {__version__}"
+
+
+def test_usage_error_is_rich_or_json(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["init"]) == 2
+    assert "╭" in capsys.readouterr().err
+    assert main(["init", "--json"]) == 2
+    raw = capsys.readouterr().out
+    assert "╭" not in raw
+    assert json.loads(raw)["ok"] is False
 
 
 def test_init_load_list_round_trip(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -50,11 +78,6 @@ def test_check_card_reads_task_yaml(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_json_is_plain(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["--json", "-v"]) == 0
-    raw = capsys.readouterr().out
-    assert "╭" not in raw
-    assert json.loads(raw) == {"package": "Jarvis-HEP-Sampler", "version": __version__}
-
     target = tmp_path / "MyScan.py"
     assert main(["init", "MyScan", "--output", str(target), "--json"]) == 0
     created = json.loads(capsys.readouterr().out)
