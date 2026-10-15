@@ -4,7 +4,7 @@ The same complete wheel and source distribution are used for development, CI and
 
 ## Version and compatibility
 
-The distribution version appears in `pyproject.toml` and `src/jarvis_hep_sampler/_version.py`. The helper updates both when given an explicit X.Y.Z argument. API version 1, stream protocol 1 and registry format 1 are separate contracts. The sampler-enabled Jarvis-HEP currently requires `Jarvis-HEP-Sampler>=0.1.0,<0.2`; widening that range requires compatibility evidence.
+The distribution version appears in `pyproject.toml` and `src/jarvis_hep_sampler/_version.py`. The helper updates both when given an explicit X.Y.Z argument. The first public distribution version is 1.0.0. API version 1, stream protocol 1 and registry format 1 are separate contracts and stay at 1. The sampler-enabled Jarvis-HEP requires `Jarvis-HEP-Sampler>=1.0.0,<2`.
 
 Publish the SDK before a HEP release that depends on it. This repository has not been uploaded during the implementation work.
 

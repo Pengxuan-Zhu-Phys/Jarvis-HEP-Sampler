@@ -14,7 +14,7 @@ mapping, selection, UUIDs, Redis, archiving and checkpoints.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -277,22 +277,29 @@ class IndependentSession:
 
     def stop_reason(self, stats: SamplerStats) -> str | None:
         """The plug-in's stop reason, else ``point_number reached`` once the budget is spent."""
-        reason = self._call_hook("stop_reason", None, self._plan, stats)
-        if reason:
-            return str(reason)
+        reason = self._call_hook(
+            "stop_reason", None, self._plan, stats,
+            normalize=lambda value: str(value) if value else None,
+        )
+        if reason is not None:
+            return reason
         return DEFAULT_STOP_REASON if stats.candidates >= stats.point_number else None
 
     def status(self, stats: SamplerStats) -> dict[str, Any]:
         """Monitor metrics from the plug-in: at most 8 scalar keys, short strings."""
-        raw = self._call_hook("status", {}, self._plan, stats)
+        return self._call_hook("status", {}, self._plan, stats, normalize=self._status_metrics)
+
+    @staticmethod
+    def _status_metrics(raw: Any) -> dict[str, Any]:
         if not isinstance(raw, Mapping):
-            self._hook_failed("status", f"returned {type(raw).__name__}, expected a dict")
-            return {}
+            raise TypeError(f"returned {type(raw).__name__}, expected a dict")
         metrics: dict[str, Any] = {}
         for key, value in raw.items():
             if len(metrics) >= STATUS_MAX_KEYS:
                 break
             label = str(key)[:STATUS_MAX_TEXT]
+            if isinstance(value, np.generic):
+                value = value.item()
             if isinstance(value, (bool, int)):
                 metrics[label] = value
             elif isinstance(value, float) and math.isfinite(value):
@@ -302,22 +309,27 @@ class IndependentSession:
         return metrics
 
     def _rows(self, name: str, *args: Any) -> list[tuple[str, Any]]:
-        raw = self._call_hook(name, [], *args)
-        try:
-            rows = [(str(key), value) for key, value in (raw or [])]
-        except (TypeError, ValueError):
-            self._hook_failed(name, "must return a list of (name, value) pairs")
-            return []
-        return rows
+        return self._call_hook(
+            name, [], *args,
+            normalize=lambda raw: [(str(key), value) for key, value in (raw or [])],
+        )
 
-    def _call_hook(self, name: str, default: Any, *args: Any) -> Any:
+    def _call_hook(
+        self, name: str, default: Any, *args: Any, normalize: Callable[[Any], Any]
+    ) -> Any:
         hook = self.plugin.function(name)
         if hook is None:
             return default
         try:
-            return hook(*args)
+            # A generator or custom mapping can fail only when consumed, and
+            # truth/str conversions also run plug-in code. Protect all of it.
+            return normalize(hook(*args))
         except Exception as exc:
-            self._hook_failed(name, f"raised {type(exc).__name__}: {exc}")
+            try:
+                detail = str(exc)
+            except Exception:
+                detail = "<exception text unavailable>"
+            self._hook_failed(name, f"raised {type(exc).__name__}: {detail}")
             return default
 
     def _hook_failed(self, name: str, detail: str) -> None:

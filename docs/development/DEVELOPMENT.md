@@ -1,5 +1,10 @@
 # Development
 
+The [development ledger](DEVELOPMENT_LEDGER.md) tracks the current native-use goal:
+after `Jarvis sampler load <file>`, users follow the same task-card and run workflow
+as built-in samplers, with external samplers managed through `Jarvis sampler`.
+It records implementation status, review findings, and the SDK/HEP acceptance gates.
+
 After source changes, rebuild and verify the complete package before testing an installation:
 
 ```bash
@@ -36,6 +41,16 @@ The helper runs all SDK tests against the installed wheel in a separate fresh ve
 - Top-level names are lazy (`__init__.__getattr__`). Add new exports to both `_LAZY_ATTRS` and `__all__`; a test checks that the two match.
 - The independent profile has one implementation, `IndependentSession`. The offline driver and the Jarvis-HEP adapter both call it, so `check` and a real scan cannot drift apart.
 - A plug-in failure becomes a `PluginError` subclass, with the plug-in's exception as `__cause__`.
+- Reporting hooks are protected through return-value consumption and normalization;
+  a lazy iterator or conversion error is a hook failure. Control-flow exceptions
+  such as `KeyboardInterrupt` and `SystemExit` still propagate.
+- Protocol 1 raw PCG64 vectors are pinned in `tests/test_stream_protocol.py`; shared
+  offline/native replay checks alone cannot detect a stream change on both sides.
+- Registry reads that execute code hold a shared lock only while obtaining and
+  verifying the entry and payload. User imports run outside that lock. The
+  `sources.json` replacement is the management commit point; failed cleanup is
+  deferred in private `.pending_cleanup.json` and cannot turn a committed load
+  or remove into a reported failure. Only explicitly retired snapshots are retried.
 
 ## What Jarvis-HEP calls
 
@@ -53,3 +68,7 @@ The helper runs all SDK tests against the installed wheel in a separate fresh ve
 | Scan identity | `STREAM_PROTOCOL`, `PLUGIN` metadata, `thaw_options(session.options)` |
 
 The design record is `docs/jarvis-hep-sampler/technical-design.md` in the Jarvis-HEP repository.
+
+## Native recovery acceptance
+
+The [M2 verification record](M2_VERIFICATION.md) covers sparse durable rows, terminal failures, a rejection-only tail, registry updates/removal during active scans, and resource startup retry. The HEP host reconstructs prefix and pending accepted indices from DATABASE; `FixedSetSampler` skips durable rows at submission and returns the actual new task count. Candidate generation and the SDK protocol do not change. Failed durable rows remain terminal, and the pending set is not checkpointed.

@@ -41,7 +41,7 @@ def check_method_name(name: object, *, reserved_names: Iterable[str] = ()) -> st
     *reserved_names* are the built-in Jarvis-HEP methods; a plug-in may not
     take one of them, whatever the letter case.
     """
-    if not isinstance(name, str) or not METHOD_NAME_RE.match(name):
+    if not isinstance(name, str) or not METHOD_NAME_RE.fullmatch(name):
         raise PluginLoadError(
             f"method name {name!r} must start with an upper-case letter and use "
             "2-64 letters or digits, like the built-in methods (e.g. MyLatinHypercube)"

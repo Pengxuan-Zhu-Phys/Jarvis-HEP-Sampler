@@ -90,7 +90,7 @@ Every context has `log`. Jarvis-HEP writes the start, settings, ready, checkpoin
 | `log.saved(what, path)` | `<What> saved to <path>` for a file you wrote (WARNING) |
 | `log.info(...)`, `log.warning(...)`, `log.debug(...)` | Anything else |
 
-`stats` in the hooks has `candidates`, `accepted` and `point_number`. `status` may return up to 8 scalar metrics, with strings of up to 32 characters; extra or non-scalar entries are dropped. A hook that raises is logged and skipped; it never stops the scan. Without `stop_reason`, the reason is `point_number reached`.
+`stats` in the hooks has `candidates`, `accepted` and `point_number`. `status` may return up to 8 scalar metrics, with strings of up to 32 characters; NumPy boolean, integer, floating-point and string scalars are converted to their Python equivalents. Extra, non-finite or non-scalar entries are dropped. A reporting hook that raises, including while its returned rows or mapping are consumed or converted, is logged and skipped; it never stops the scan. Interrupts and process-exit requests still propagate. Without `stop_reason`, the reason is `point_number reached`.
 
 ## Errors
 
@@ -102,7 +102,7 @@ Every context has `log`. Jarvis-HEP writes the start, settings, ready, checkpoin
 | `PluginResumeMismatch` | A resumed scan does not match the original run |
 | `RegistryError` | `~/.jarvis/samplers` is unreadable or a snapshot is broken |
 
-Your own exception is chained to these, so its traceback reaches the log. A failing plug-in stops the scan; Jarvis-HEP never falls back to another sampler.
+Your own exception is chained to these, so its traceback reaches the log. Output conversion errors, including overflow when converting to float64, are also reported as `PluginOutputError` with the method and candidate position. A failing draw stops the scan; Jarvis-HEP never falls back to another sampler.
 
 ## The registry
 
@@ -110,7 +110,18 @@ Your own exception is chained to these, so its traceback reaches the log. A fail
 
 - Runs use the copy, not your working file. Edit, then load again.
 - `Jarvis sampler list` marks a working file changed since the last load.
-- Loading the same method again replaces the entry and deletes the old copy.
+- Loading the same method again replaces the entry and retires the old copy.
+- If removing a retired copy fails after the registration commits, the command
+  still succeeds and reports a cleanup warning. Only explicitly retired copies
+  are retried on a later successful load/remove; arbitrary files are not swept.
+- The SDK retains a private `.pending_cleanup.json` only when cleanup needs a
+  retry. A damaged retry file or a failure to save it is reported without
+  undoing the completed registration; manual cleanup may then be needed.
+
+The SDK reads and verifies snapshot bytes under the registry lock, then imports
+those same bytes after releasing the lock. Managed snapshot paths must stay
+inside `user_sources` and cannot be symbolic links. Removing a registration
+preserves the working source file and an existing scan's own bound source.
 
 The registry belongs to your user account on one machine. Load the plug-in on every machine that runs the card.
 
@@ -118,7 +129,9 @@ The registry belongs to your user account on one machine. Load the plug-in on ev
 
 A snapshot fixes only this Python entry file. Install any packages it imports in the same environment as Jarvis-HEP. Sibling modules and data files are not copied, and `__file__` points at the snapshot during a real run. The independent profile does not use Worker feedback; points may still be correlated, as in LHS or a low-discrepancy design.
 
-`check` executes the file, reimports the same source bytes, and restarts them in a fresh Python process to compare the tail. A successful check exercises this configuration; it does not prove the algorithm scientifically correct. `--card` preserves the card budget unless `--points` explicitly overrides it; this override changes the total design, rather than just the number of checked points.
+`Jarvis sampler check` executes the file, reimports the same source bytes, and restarts them in a fresh Python process to compare the tail. A successful check exercises this configuration; it does not prove the algorithm scientifically correct. `--card` preserves the card budget unless `--points` explicitly overrides it; this override changes the total design, rather than just the number of checked points.
+
+`Jarvis check` is the separate calculator smoke. It draws a few points through the loaded plug-in and the card's opera and likelihood. Its identity goes to `DATABASE/test/sampler_identity.json`, and its bound source and checkpoint go under `checkpoints/<scan>/<Method>/check/`. It does not read or replace the formal science database, bound source or resume checkpoint. `runtime.json`, logs and `run_summary` stay in the scan's ordinary files.
 
 Schemas are optional. When supplied, local `$defs`/`$ref` references are supported. Referenced documents are never downloaded during validation; unresolved references produce an offline diagnostic. Schema defaults remain documentation and are not applied automatically.
 

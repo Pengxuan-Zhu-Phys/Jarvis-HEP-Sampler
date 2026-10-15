@@ -207,3 +207,122 @@ def status(plan, stats):
     assert metrics["long"] == "x" * 32
     assert session.stop_reason(stats) == "point_number reached"
     assert session.stop_reason(session.stats(candidates=3, accepted=3)) is None
+
+
+@pytest.mark.parametrize(
+    ("hook", "body", "detail"),
+    [
+        ("settings_rows", '''
+def settings_rows(setup, plan):
+    yield ("count", 1)
+    raise RuntimeError("rows iteration failed")
+''', "rows iteration failed"),
+        ("summary_rows", '''
+class BadLabel:
+    def __str__(self):
+        raise RuntimeError("row label failed")
+def summary_rows(plan, stats):
+    return [(BadLabel(), 1)]
+''', "row label failed"),
+        ("status", '''
+class Metrics(dict):
+    def items(self):
+        yield ("count", 1)
+        raise RuntimeError("metrics iteration failed")
+def status(plan, stats):
+    return Metrics()
+''', "metrics iteration failed"),
+        ("status", '''
+class BadLabel:
+    def __str__(self):
+        raise RuntimeError("metric label failed")
+def status(plan, stats):
+    return {BadLabel(): 1}
+''', "metric label failed"),
+        ("stop_reason", '''
+def stop_reason(plan, stats):
+    return np.array(["budget", "finished"])
+''', "ValueError"),
+        ("stop_reason", '''
+class BadReason:
+    def __str__(self):
+        raise RuntimeError("reason text failed")
+def stop_reason(plan, stats):
+    return BadReason()
+''', "reason text failed"),
+    ],
+    ids=["lazy-rows", "row-label", "lazy-metrics", "metric-label", "reason-truth", "reason-text"],
+)
+def test_reporting_result_errors_are_isolated(write_plugin, caplog, hook, body, detail):
+    session = make(write_plugin, '''
+def draw(context, rng, plan):
+    return [0.5] * context.dimension
+''' + body)
+    session.prepare()
+    stats = session.stats(candidates=3, accepted=2)
+
+    def report():
+        if hook == "settings_rows":
+            return session.settings_rows()
+        return getattr(session, hook)(stats)
+
+    expected = {} if hook == "status" else None if hook == "stop_reason" else []
+    with caplog.at_level(logging.WARNING):
+        assert report() == expected
+        assert report() == expected
+    assert len(session.hook_errors) == 1
+    assert hook in session.hook_errors[0] and detail in session.hook_errors[0]
+    assert len([record for record in caplog.records if "could not report" in record.message]) == 1
+    assert np.array_equal(session.point(0), [0.5, 0.5])
+    if hook == "stop_reason":
+        finished = session.stats(candidates=10, accepted=2)
+        assert session.stop_reason(finished) == "point_number reached"
+
+
+def test_hook_exception_with_broken_text_still_reports_failure(write_plugin):
+    session = make(write_plugin, '''
+class Unprintable(RuntimeError):
+    def __str__(self):
+        raise ValueError("text failed")
+def status(plan, stats):
+    raise Unprintable()
+def draw(context, rng, plan):
+    return [0.5] * context.dimension
+''')
+    session.prepare()
+    assert session.status(session.stats(0, 0)) == {}
+    assert len(session.hook_errors) == 1
+    assert "Unprintable: <exception text unavailable>" in session.hook_errors[0]
+
+
+@pytest.mark.parametrize("exception", [KeyboardInterrupt, SystemExit])
+def test_reporting_iteration_preserves_control_flow_exceptions(write_plugin, exception):
+    session = make(write_plugin, f'''
+def settings_rows(setup, plan):
+    yield ("count", 1)
+    raise {exception.__name__}("stop")
+def draw(context, rng, plan):
+    return [0.5] * context.dimension
+''')
+    session.prepare()
+    with pytest.raises(exception, match="stop"):
+        session.settings_rows()
+    assert session.hook_errors == []
+
+
+def test_status_normalizes_numpy_scalars_and_keeps_scalar_limits(write_plugin):
+    session = make(write_plugin, '''
+def status(plan, stats):
+    return {"count": np.int64(4), "unsigned": np.uint32(5), "scale": np.float32(.25),
+            "ready": np.bool_(True), "label": np.str_("x" * 99),
+            "nan": np.float32("nan"), "inf": np.float64("inf"),
+            "complex": np.complex64(1j), "array": np.array(.5),
+            "date": np.datetime64("2026-10-15")}
+def draw(context, rng, plan):
+    return [0.5] * context.dimension
+''')
+    session.prepare()
+    metrics = session.status(session.stats(0, 0))
+    assert metrics == {"count": 4, "unsigned": 5, "scale": .25, "ready": True, "label": "x" * 32}
+    assert [type(value) for value in metrics.values()] == [int, int, float, bool, str]
+    assert session.hook_errors == []

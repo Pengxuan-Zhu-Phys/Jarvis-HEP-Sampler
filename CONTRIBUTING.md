@@ -11,7 +11,7 @@ Jarvis-HEP remains responsible for the `Jarvis sampler` CLI, task-card validatio
 
    ```bash
    ./jhsrel
-   python -m pip install dist/0.1.0/*.whl
+   python -m pip install dist/1.0.0/*.whl
    ```
 
 3. Make the smallest practical change.

@@ -98,3 +98,19 @@ def test_block_checks_only_rows_in_budget():
 def test_block_shape_must_match_exactly():
     with pytest.raises(PluginOutputError, match="shape"):
         check_block(np.zeros((3, 2)), block_size=4, dimension=2, block_index=0)
+
+
+def test_point_float64_overflow_keeps_output_error_context():
+    with pytest.raises(PluginOutputError, match="float64") as info:
+        check_point([10 ** 400], dimension=1, candidate_index=7, method="Demo")
+    assert isinstance(info.value.__cause__, OverflowError)
+    assert info.value.method == "Demo"
+    assert info.value.candidate_index == 7
+
+
+def test_block_float64_overflow_keeps_output_error_context():
+    with pytest.raises(PluginOutputError, match="float64") as info:
+        check_block([[0.5], [10 ** 400]], block_size=2, dimension=1, block_index=3, method="Demo")
+    assert isinstance(info.value.__cause__, OverflowError)
+    assert info.value.method == "Demo"
+    assert info.value.candidate_index == 6

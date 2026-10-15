@@ -42,15 +42,21 @@ This package never imports Jarvis-HEP, Redis or Portal.
 
 ## Complete package installation
 
-The first PyPI release is pending. Install your local checkout before installing the sampler-enabled Jarvis-HEP branch:
+Version 1.0.0. Install from PyPI:
+
+```bash
+python -m pip install "Jarvis-HEP-Sampler==1.0.0"
+```
+
+The same complete wheel can be built locally:
 
 ```bash
 cd Jarvis-HEP-Sampler
-./jhsrel
-python -m pip install dist/0.1.0/*.whl
+./jhsrel 1.0.0
+python -m pip install dist/1.0.0/*.whl
 ```
 
-Dependencies: NumPy and jsonschema. Published Jarvis-HEP versions that support samplers will install the SDK as a dependency.
+Dependencies: NumPy and jsonschema. A sampler-enabled Jarvis-HEP installs this SDK with `Jarvis-HEP-Sampler>=1.0.0,<2`.
 
 The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
@@ -101,6 +107,25 @@ Sampling:
 
 The full contract is in [Plug-in authoring](docs/development/PLUGIN_AUTHORING.md).
 
+A complete runnable card is provided in
+[examples/MyLatinHypercube.task.yaml](examples/MyLatinHypercube.task.yaml).
+It uses Jarvis-HEP's bundled Eggbox demonstration operator:
+
+```bash
+Jarvis sampler check examples/MyLatinHypercube.py --card examples/MyLatinHypercube.task.yaml
+Jarvis sampler load examples/MyLatinHypercube.py
+Jarvis validate examples/MyLatinHypercube.task.yaml
+Jarvis check examples/MyLatinHypercube.task.yaml
+Jarvis run examples/MyLatinHypercube.task.yaml
+```
+
+`Jarvis sampler check` is the offline file check and does not require `load`. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
+
+Run this example with the sampler check-isolation fixes described in the
+[development ledger](docs/development/DEVELOPMENT_LEDGER.md). Reloading the same
+method updates future scans; removing the registration preserves existing scans'
+bound source and their normal `Jarvis run ... --resume` workflow.
+
 ## Python API
 
 ```python
@@ -138,6 +163,7 @@ The helper runs all SDK tests against the installed wheel in a separate fresh ve
 - [Docs index](docs/README.md)
 - [Plug-in authoring](docs/development/PLUGIN_AUTHORING.md)
 - [Development](docs/development/DEVELOPMENT.md)
+- [Development ledger](docs/development/DEVELOPMENT_LEDGER.md)
 - [Release](docs/release/RELEASE.md)
 - [Contributing](CONTRIBUTING.md)
 - Design record: `docs/jarvis-hep-sampler/technical-design.md` in the Jarvis-HEP repository

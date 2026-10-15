@@ -4,6 +4,7 @@ import pytest
 
 from jarvis_hep_sampler.errors import PluginLoadError
 from jarvis_hep_sampler.metadata import check_method_name, parse_metadata
+from jarvis_hep_sampler.template import render_template
 
 BASE = {"api_version": 1, "method": "LatinHypercube", "version": "0.1.0", "profile": "independent"}
 
@@ -33,11 +34,20 @@ def test_builtin_shaped_names_are_valid(name):
 
 
 @pytest.mark.parametrize(
-    "name", ["latin", "L", "Latin-Hypercube", "Latin Hypercube", "lab:lhs", "", 3, None, "A" * 65]
+    "name",
+    [
+        "latin", "L", "Latin-Hypercube", "Latin Hypercube", "lab:lhs", "", 3, None,
+        "A" * 65, "Demo\n",
+    ],
 )
 def test_bad_method_names(name):
     with pytest.raises(PluginLoadError):
         check_method_name(name)
+
+
+def test_template_rejects_a_method_with_a_trailing_newline():
+    with pytest.raises(PluginLoadError, match="2-64 letters or digits"):
+        render_template("Demo\n")
 
 
 def test_builtin_names_are_reserved_whatever_the_case():

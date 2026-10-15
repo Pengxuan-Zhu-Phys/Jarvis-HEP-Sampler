@@ -35,14 +35,14 @@ def _as_float_array(value: object, fail) -> np.ndarray:
     if isinstance(value, np.ndarray):
         if value.dtype.kind not in _REAL_KINDS:
             raise fail(f"has dtype {value.dtype}; expected real numbers")
-        return np.array(value, dtype=np.float64)
-    if isinstance(value, (list, tuple)):
+    elif isinstance(value, (list, tuple)):
         _check_elements(value, fail)
-        try:
-            return np.array(value, dtype=np.float64)
-        except (TypeError, ValueError) as exc:
-            raise fail(f"is not a regular array: {exc}") from exc
-    raise fail(f"must be a numpy array, list or tuple, got {type(value).__name__}")
+    else:
+        raise fail(f"must be a numpy array, list or tuple, got {type(value).__name__}")
+    try:
+        return np.array(value, dtype=np.float64)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise fail(f"cannot convert to a regular float64 array: {exc}") from exc
 
 
 def _component(index: int, variable_names: Sequence[str]) -> str:
