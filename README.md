@@ -43,10 +43,10 @@ This package does not import Jarvis-HEP, Redis or Portal. `jsampler check --card
 
 ## Complete package installation
 
-Version 1.0.1. Install from PyPI:
+Version 1.0.2. Install from PyPI:
 
 ```bash
-python -m pip install "Jarvis-HEP-Sampler==1.0.1"
+python -m pip install "Jarvis-HEP-Sampler==1.0.2"
 ```
 
 From this repository:

@@ -13,6 +13,9 @@ def test_versions_match():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     version = re.search(r'(?m)^version\s*=\s*"([^"]+)"$', pyproject).group(1)
     assert jarvis_hep_sampler.__version__ == version
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"Version {version}." in readme
+    assert f"Jarvis-HEP-Sampler=={version}" in readme
 
 
 def test_public_names_resolve():
