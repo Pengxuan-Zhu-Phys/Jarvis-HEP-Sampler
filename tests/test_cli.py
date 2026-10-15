@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -45,4 +46,26 @@ def test_check_card_reads_task_yaml(capsys: pytest.CaptureFixture[str]) -> None:
     assert kwargs["seed"] == 7
     assert kwargs["point_number"] == 32
     assert kwargs["options"] == {"centered": True}
-    assert "card overrides" in capsys.readouterr().out
+    assert "CARD OVERRIDES" in capsys.readouterr().out
+
+
+def test_json_is_plain(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--json", "-v"]) == 0
+    raw = capsys.readouterr().out
+    assert "╭" not in raw
+    assert json.loads(raw) == {"package": "Jarvis-HEP-Sampler", "version": __version__}
+
+    target = tmp_path / "MyScan.py"
+    assert main(["init", "MyScan", "--output", str(target), "--json"]) == 0
+    created = json.loads(capsys.readouterr().out)
+    assert created["ok"] is True and created["path"].endswith("MyScan.py")
+    assert main(["load", str(target), "--json"]) == 0
+    loaded = json.loads(capsys.readouterr().out)
+    assert loaded["method"] == "MyScan"
+    assert main(["--json", "list"]) == 0
+    raw = capsys.readouterr().out
+    assert "╭" not in raw
+    assert json.loads(raw)["samplers"][0]["method"] == "MyScan"
+    assert main(["info", "Missing", "--json"]) != 0
+    failed = json.loads(capsys.readouterr().out)
+    assert failed["ok"] is False and "Missing" in failed["error"]["message"]

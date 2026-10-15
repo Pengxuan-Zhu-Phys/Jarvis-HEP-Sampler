@@ -7,10 +7,18 @@ methods. ``check --card`` reads Variables and Bounds from the task YAML.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Mapping
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
+
+from rich import box
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from jarvis_hep_sampler._version import __version__
 
@@ -18,11 +26,24 @@ EXIT_OK = 0
 EXIT_RUN_FAILED = 1
 EXIT_USAGE = 2
 _HELP_FLAGS = frozenset({"-h", "--help"})
+_AS_JSON: ContextVar[bool] = ContextVar("jsampler_json", default=False)
+
+
+def _json_options() -> argparse.ArgumentParser:
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument(
+        "--json",
+        action="store_true",
+        help="Print one plain JSON object instead of the formatted view",
+    )
+    return parent
 
 
 def build_parser(prog: str) -> argparse.ArgumentParser:
     """The ``jsampler`` command. ``prog`` is the name printed in help and errors."""
+    options = _json_options()
     parser = argparse.ArgumentParser(
+        parents=[options],
         prog=prog,
         description=(
             "Write your own sampler as one Python file, load it once, then use it as "
@@ -38,11 +59,11 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="sampler_command", required=False)
 
-    init = sub.add_parser("init", help="Create a sampler file from the template")
+    init = sub.add_parser("init", parents=[options], help="Create a sampler file from the template")
     init.add_argument("method", help="Sampling.Method name, e.g. MyLatinHypercube")
     init.add_argument("--output", help="File or directory to write (default ./<Method>.py)")
 
-    check = sub.add_parser("check", help="Check a sampler offline (no Redis)")
+    check = sub.add_parser("check", parents=[options], help="Check a sampler offline (no Redis)")
     check.add_argument("target", help="Sampler file, or the name of a loaded sampler")
     context = check.add_mutually_exclusive_group()
     context.add_argument("--dimension", type=int, help="Number of variables (default 2)")
@@ -53,15 +74,19 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
     )
     check.add_argument("--seed", type=int, help="Seed (default: the card's, else 0)")
 
-    load = sub.add_parser("load", help="Load or replace a sampler for every new run")
+    load = sub.add_parser(
+        "load", parents=[options], help="Load or replace a sampler for every new run",
+    )
     load.add_argument("file", help="Sampler .py file")
 
-    sub.add_parser("list", help="List samplers loaded by this package")
+    sub.add_parser("list", parents=[options], help="List samplers loaded by this package")
 
-    info = sub.add_parser("info", help="Show one loaded sampler")
+    info = sub.add_parser("info", parents=[options], help="Show one loaded sampler")
     info.add_argument("method", help="Sampling.Method name")
 
-    remove = sub.add_parser("remove", help="Unload a sampler (your file is kept)")
+    remove = sub.add_parser(
+        "remove", parents=[options], help="Unload a sampler (your file is kept)",
+    )
     remove.add_argument("method", help="Sampling.Method name")
     remove.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
     return parser
@@ -84,8 +109,19 @@ def main(argv: list[str] | None = None, *, prog: str = "jsampler") -> int:
         parsed = parser.parse_args(args)
     except SystemExit as exc:
         return int(exc.code or EXIT_USAGE)
+    token = _AS_JSON.set("--json" in args)
+    try:
+        return _dispatch(prog, parser, parsed)
+    finally:
+        _AS_JSON.reset(token)
+
+
+def _dispatch(prog: str, parser: argparse.ArgumentParser, parsed: Any) -> int:
     if parsed.version:
-        print(f"Jarvis-HEP-Sampler {__version__}")
+        if _json():
+            _print_json({"package": "Jarvis-HEP-Sampler", "version": __version__})
+        else:
+            print(f"Jarvis-HEP-Sampler {__version__}")
         return EXIT_OK
     command = parsed.sampler_command
     if command == "init":
@@ -104,20 +140,55 @@ def main(argv: list[str] | None = None, *, prog: str = "jsampler") -> int:
     return EXIT_USAGE
 
 
+def _json() -> bool:
+    return _AS_JSON.get()
+
+
+def _print_json(payload: Mapping[str, Any]) -> None:
+    print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False))
+
+
+def _console() -> Console:
+    return Console(highlight=False)
+
+
 def _prefix(prog: str) -> str:
     return "[Jarvis]" if prog.startswith("Jarvis") else "[jsampler]"
 
 
-def _error(prog: str, message: str) -> int:
-    print(f"{_prefix(prog)} {message}", file=sys.stderr)
-    return EXIT_USAGE
+def _error(prog: str, message: str, *, command: str | None = None, code: int = EXIT_USAGE) -> int:
+    if _json():
+        payload: dict[str, Any] = {"ok": False, "error": {"message": message}}
+        if command is not None:
+            payload["command"] = command
+        _print_json(payload)
+    else:
+        print(f"{_prefix(prog)} {message}", file=sys.stderr)
+    return code
 
 
-def _table(title: str, rows: list[tuple[str, Any]]) -> None:
-    print(title)
-    width = max((len(str(key)) for key, _ in rows), default=0)
+def _panel(
+    title: str,
+    rows: list[tuple[str, Any]],
+    *,
+    note: str = "",
+    border: str = "cyan",
+) -> None:
+    grid = Table.grid(padding=(0, 1))
+    grid.add_column(style="bold dim", no_wrap=True)
+    grid.add_column(overflow="fold")
     for key, value in rows:
-        print(f"  {str(key).ljust(width)}  {value}")
+        grid.add_row(key.upper(), Text(str(value)))
+    body: Any = grid
+    if note:
+        body = Group(grid, Text(""), Text(note))
+    _console().print(Panel(
+        body,
+        title=Text(title, style="bold"),
+        box=box.ROUNDED,
+        border_style=border,
+        padding=(0, 1),
+    ))
 
 
 def _run_init(prog: str, method: str, output: str | None) -> int:
@@ -127,9 +198,12 @@ def _run_init(prog: str, method: str, output: str | None) -> int:
     try:
         path = write_template(method, output)
     except (PluginError, FileExistsError) as exc:
-        return _error(prog, str(exc))
-    print(f"Created {path} from the independent sampler template.")
-    print(f"Edit draw(), then run: {prog} load {path}")
+        return _error(prog, str(exc), command="init")
+    note = f"Edit draw(), then run: {prog} load {path}"
+    if _json():
+        _print_json({"command": "init", "method": method, "ok": True, "path": str(path)})
+    else:
+        _panel(f"Created · {method}", [("file", path)], note=note, border="green")
     return EXIT_OK
 
 
@@ -183,7 +257,9 @@ def _run_check(prog: str, args: Any) -> int:
 
     target = _check_target(str(args.target))
     if target is None:
-        return _error(prog, f"{args.target} is neither a file nor a loaded sampler")
+        return _error(
+            prog, f"{args.target} is neither a file nor a loaded sampler", command="check",
+        )
 
     variable_names: list[str] | None = None
     options: dict[str, Any] = {}
@@ -202,7 +278,7 @@ def _run_check(prog: str, args: Any) -> int:
             if args.card:
                 overrides.append("options (replaced by --options)")
     except Exception as exc:
-        return _error(prog, str(exc))
+        return _error(prog, str(exc), command="check")
     if args.seed is not None:
         seed = int(args.seed)
         if args.card:
@@ -212,13 +288,7 @@ def _run_check(prog: str, args: Any) -> int:
         if args.card:
             overrides.append("point_number (changes the total candidate budget)")
     dimension = None if variable_names else int(args.dimension or 2)
-
-    _table("Offline check settings ->", [
-        ("variables", ", ".join(variable_names) if variable_names else dimension),
-        ("seed", seed),
-        ("point number", point_number),
-        ("card overrides", ", ".join(overrides) if overrides else "none"),
-    ])
+    variables = ", ".join(variable_names) if variable_names else dimension
     report = check_plugin(
         target,
         point_number=point_number,
@@ -227,7 +297,35 @@ def _run_check(prog: str, args: Any) -> int:
         dimension=dimension,
         options=options,
     )
-    _table(f"{report.method or args.target} check ->", report.rows())
+    if _json():
+        _print_json({
+            "checks": [
+                {"detail": item.detail, "name": item.name, "ok": item.ok} for item in report.items
+            ],
+            "command": "check",
+            "method": report.method,
+            "ok": report.ok,
+            "settings": {
+                "card_overrides": overrides,
+                "point_number": point_number,
+                "seed": seed,
+                "variables": variables,
+            },
+            "target": str(args.target),
+        })
+    else:
+        rows = [
+            ("variables", variables),
+            ("seed", seed),
+            ("point number", point_number),
+            ("card overrides", ", ".join(overrides) if overrides else "none"),
+            *report.rows(),
+        ]
+        _panel(
+            f"Check · {report.method or args.target}",
+            rows,
+            border="green" if report.ok else "red",
+        )
     return EXIT_OK if report.ok else EXIT_RUN_FAILED
 
 
@@ -238,29 +336,51 @@ def _run_load(prog: str, file: str) -> int:
     try:
         result = SamplerRegistry().load(file)
     except PluginError as exc:
-        print(f"{_prefix(prog)} Cannot load {file}: {exc}", file=sys.stderr)
+        detail = f"Cannot load {file}: {exc}"
         cause = exc.__cause__
         if cause is not None:
-            print(f"{_prefix(prog)} Caused by {type(cause).__name__}: {cause}", file=sys.stderr)
-        return EXIT_USAGE
+            detail = f"{detail} Caused by {type(cause).__name__}: {cause}"
+        return _error(prog, detail, command="load")
     entry = result.entry
-    rows: list[tuple[str, Any]] = [
-        ("version", entry.version),
-        ("profile", entry.profile),
-        ("options schema", "yes" if entry.options_schema is not None else "no"),
-        ("source", entry.source_path),
-        ("snapshot", SamplerRegistry().snapshot_path(entry)),
-    ]
+    snapshot = str(SamplerRegistry().snapshot_path(entry))
+    replaced: str | None = None
     if result.replaced is not None:
         old = result.replaced
-        rows.append((
-            "replaced",
+        replaced = (
             f"{old.version} ({old.short_hash}) -> {entry.version} ({entry.short_hash})"
             if result.changed
-            else "unchanged (same file)",
-        ))
-    _table(f"Loaded sampler {entry.method} ->", rows)
-    print(f"Use it in a task card as  Sampling.Method: {entry.method}")
+            else "unchanged (same file)"
+        )
+    if _json():
+        payload: dict[str, Any] = {
+            "command": "load",
+            "method": entry.method,
+            "ok": True,
+            "options_schema": entry.options_schema is not None,
+            "profile": entry.profile,
+            "snapshot": snapshot,
+            "source": entry.source_path,
+            "version": entry.version,
+        }
+        if replaced is not None:
+            payload["replaced"] = replaced
+        _print_json(payload)
+    else:
+        rows: list[tuple[str, Any]] = [
+            ("version", entry.version),
+            ("profile", entry.profile),
+            ("options schema", "yes" if entry.options_schema is not None else "no"),
+            ("source", entry.source_path),
+            ("snapshot", snapshot),
+        ]
+        if replaced is not None:
+            rows.append(("replaced", replaced))
+        _panel(
+            f"Loaded · {entry.method}",
+            rows,
+            note=f"Use it in a task card as  Sampling.Method: {entry.method}",
+            border="green",
+        )
     return EXIT_OK
 
 
@@ -271,14 +391,14 @@ def _status(registry: Any, entry: Any) -> str:
     return registry.source_state(entry)
 
 
-def _print_rows(rows: list[tuple[str, str, str, str, str]]) -> None:
-    header = ("Method", "Version", "Profile", "Source", "Status")
-    widths = [max(len(str(row[i])) for row in [header, *rows]) for i in range(len(header))]
-    for row in [header, tuple("-" * width for width in widths), *rows]:
-        line = "  ".join(
-            str(cell).ljust(width) for cell, width in zip(row, widths, strict=True)
-        )
-        print(line.rstrip())
+def _status_text(status: str) -> Text:
+    if status == "ok":
+        style = "bold green"
+    elif status.startswith("broken") or "missing" in status:
+        style = "bold red"
+    else:
+        style = "bold yellow"
+    return Text(status, style=style)
 
 
 def _run_list(prog: str) -> int:
@@ -286,20 +406,51 @@ def _run_list(prog: str) -> int:
     from jarvis_hep_sampler.errors import RegistryError
 
     registry = SamplerRegistry()
-    rows: list[tuple[str, str, str, str, str]] = []
     try:
         entries = registry.entries()
     except RegistryError as exc:
-        _print_rows(rows)
-        print(f"{_prefix(prog)} {exc}", file=sys.stderr)
-        return EXIT_RUN_FAILED
-    for method, entry in entries.items():
-        rows.append((
-            method, entry.version, entry.profile, entry.source_path,
-            _status(registry, entry),
-        ))
-    _print_rows(rows)
-    print(f"Registry: {registry.home}")
+        return _error(prog, str(exc), command="list", code=EXIT_RUN_FAILED)
+    listed = [
+        {
+            "method": method,
+            "profile": entry.profile,
+            "source": entry.source_path,
+            "status": _status(registry, entry),
+            "version": entry.version,
+        }
+        for method, entry in entries.items()
+    ]
+    if _json():
+        _print_json({
+            "command": "list",
+            "ok": True,
+            "registry": str(registry.home),
+            "samplers": listed,
+        })
+        return EXIT_OK
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold dim")
+    for name in ("Method", "Version", "Profile", "Source", "Status"):
+        table.add_column(name.upper(), overflow="fold")
+    for item in listed:
+        table.add_row(
+            Text(item["method"], style="bold #c8c8ff"),
+            item["version"],
+            item["profile"],
+            Text(item["source"], style="dim"),
+            _status_text(item["status"]),
+        )
+    body: Any = table
+    if not listed:
+        body = Group(table, Text("No samplers loaded.", style="dim"))
+    _console().print(
+        Panel(
+            Group(body, Text(""), Text(f"Registry: {registry.home}", style="dim")),
+            title=Text("Loaded samplers", style="bold"),
+            box=box.ROUNDED,
+            border_style="dim",
+            padding=(0, 1),
+        )
+    )
     return EXIT_OK
 
 
@@ -309,8 +460,29 @@ def _run_info(prog: str, method: str) -> int:
     registry = SamplerRegistry()
     entry = registry.get(method)
     if entry is None:
-        return _error(prog, f"no loaded sampler named {method!r}; see: {prog} list")
-    _table(f"Sampler {entry.method} ->", [
+        return _error(
+            prog, f"no loaded sampler named {method!r}; see: {prog} list", command="info",
+        )
+    status = _status(registry, entry)
+    if _json():
+        _print_json({
+            "command": "info",
+            "description": entry.description,
+            "functions": list(entry.hooks),
+            "loaded_at": entry.loaded_at,
+            "method": entry.method,
+            "ok": True,
+            "options_schema": entry.options_schema is not None,
+            "profile": entry.profile,
+            "sha256": entry.source_sha256,
+            "snapshot": str(registry.snapshot_path(entry)),
+            "source": entry.source_path,
+            "statistical": entry.statistical,
+            "status": status,
+            "version": entry.version,
+        })
+        return EXIT_OK
+    _panel(f"Sampler · {entry.method}", [
         ("version", entry.version),
         ("profile", entry.profile),
         ("description", entry.description or "—"),
@@ -321,7 +493,7 @@ def _run_info(prog: str, method: str) -> int:
         ("snapshot", registry.snapshot_path(entry)),
         ("sha256", entry.source_sha256),
         ("loaded at", entry.loaded_at),
-        ("status", _status(registry, entry)),
+        ("status", status),
     ])
     return EXIT_OK
 
@@ -332,8 +504,10 @@ def _run_remove(prog: str, method: str, *, yes: bool) -> int:
 
     registry = SamplerRegistry()
     if not yes:
-        if not sys.stdin.isatty():
-            return _error(prog, "pass --yes to remove a sampler non-interactively")
+        if _json() or not sys.stdin.isatty():
+            return _error(
+                prog, "pass --yes to remove a sampler non-interactively", command="remove",
+            )
         answer = input(f"Remove sampler {method} from {registry.home}? [y/N] ").strip().lower()
         if answer not in {"y", "yes"}:
             print("Nothing removed.")
@@ -341,8 +515,21 @@ def _run_remove(prog: str, method: str, *, yes: bool) -> int:
     try:
         removed = registry.remove(method)
     except RegistryError as exc:
-        return _error(prog, str(exc))
-    print(f"Removed sampler {removed.method}; your file {removed.source_path} is unchanged.")
+        return _error(prog, str(exc), command="remove")
+    if _json():
+        _print_json({
+            "command": "remove",
+            "method": removed.method,
+            "ok": True,
+            "source": removed.source_path,
+        })
+    else:
+        _panel(
+            f"Removed · {removed.method}",
+            [("file", removed.source_path)],
+            note="Your file is unchanged.",
+            border="green",
+        )
     return EXIT_OK
 
 

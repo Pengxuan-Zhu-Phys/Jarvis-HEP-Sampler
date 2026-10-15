@@ -12,7 +12,7 @@ jsampler load MyLatinHypercube.py    # snapshot into ~/.jarvis/samplers; reloadi
 Jarvis run task.yaml                 # Sampling.Method: MyLatinHypercube
 ```
 
-`jsampler` is this package's command. It only sees samplers loaded into `~/.jarvis/samplers`. `Jarvis sampler` is Jarvis-HEP's command and also knows the built-in methods. `jsampler -v` prints this package's version. The SDK also supports offline Python use (see [Python API](#python-api)).
+`jsampler` is this package's command. It only sees samplers loaded into `~/.jarvis/samplers`. `Jarvis sampler` is Jarvis-HEP's command and also knows the built-in methods. `jsampler -v` prints this package's version. `jsampler --json` prints one plain JSON object. The SDK also supports offline Python use (see [Python API](#python-api)).
 
 ## Scope
 
@@ -55,7 +55,7 @@ From this repository:
 python -m pip install .
 ```
 
-Dependencies: NumPy, jsonschema and PyYAML. A sampler-enabled Jarvis-HEP installs this SDK with `Jarvis-HEP-Sampler>=1.0.0,<2`.
+Dependencies: NumPy, jsonschema, PyYAML and rich. A sampler-enabled Jarvis-HEP installs this SDK with `Jarvis-HEP-Sampler>=1.0.0,<2`.
 
 The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
