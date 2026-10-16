@@ -77,7 +77,28 @@ def test_case_only_conflict_and_reserved_names(write_plugin, uniform_plugin):
         registry.load(other)
     random = write_plugin(UNIFORM.replace('"Uniform"', '"Random"'), "random.py")
     with pytest.raises(PluginLoadError, match="built-in"):
-        registry.load(random, reserved_names=["Random"])
+        registry.load(random)
+    assert "Random" not in registry.entries()
+
+
+@pytest.mark.parametrize("legacy_name", ["Grid", "grid"])
+def test_old_reserved_name_registration_can_still_be_read_and_removed(
+    uniform_plugin, legacy_name
+):
+    registry = SamplerRegistry()
+    entry = registry.load(uniform_plugin).entry
+    stored = json.loads(registry.store_path.read_text())
+    old = stored["entries"].pop("Uniform")
+    old["plugin"]["method"] = legacy_name
+    stored["entries"][legacy_name] = old
+    registry.store_path.write_text(json.dumps(stored), encoding="utf-8")
+
+    assert registry.get(legacy_name).method == legacy_name
+    assert legacy_name in registry.entries()
+    assert registry.remove(legacy_name).method == legacy_name
+    assert registry.entries() == {}
+    assert not registry.snapshot_path(entry).exists()
+    assert uniform_plugin.exists()
 
 
 def test_runs_use_the_snapshot_not_the_working_copy(uniform_plugin):

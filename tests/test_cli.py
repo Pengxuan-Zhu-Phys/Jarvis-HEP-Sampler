@@ -38,7 +38,12 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-v"]) == 0
     assert capsys.readouterr().out.strip() == f"Jarvis-HEP-Sampler {__version__}"
     assert main(["--version", "--json"], prog="Jarvis sampler") == 0
-    assert capsys.readouterr().out.strip() == f"Jarvis-HEP-Sampler {__version__}"
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": True,
+        "command": "sampler version",
+        "name": "Jarvis-HEP-Sampler",
+        "version": __version__,
+    }
 
 
 def test_usage_error_is_rich_or_json(capsys: pytest.CaptureFixture[str]) -> None:

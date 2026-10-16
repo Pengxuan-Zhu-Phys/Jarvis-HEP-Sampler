@@ -23,6 +23,7 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     # metadata
     "API_VERSION": ("jarvis_hep_sampler.metadata", "API_VERSION"),
     "PluginMetadata": ("jarvis_hep_sampler.metadata", "PluginMetadata"),
+    "RESERVED_METHOD_NAMES": ("jarvis_hep_sampler.metadata", "RESERVED_METHOD_NAMES"),
     "check_method_name": ("jarvis_hep_sampler.metadata", "check_method_name"),
     # contexts and logging
     "BlockContext": ("jarvis_hep_sampler.contexts", "BlockContext"),
@@ -78,6 +79,7 @@ __all__ = [
     "PluginResumeMismatch",
     "RegistryEntry",
     "RegistryError",
+    "RESERVED_METHOD_NAMES",
     "ReservedSettings",
     "STREAM_PROTOCOL",
     "SamplerLog",
@@ -108,7 +110,12 @@ if TYPE_CHECKING:
     )
     from jarvis_hep_sampler.loader import LoadedPlugin, load_plugin_file, load_plugin_source
     from jarvis_hep_sampler.log import LogBackend, SamplerLog
-    from jarvis_hep_sampler.metadata import API_VERSION, PluginMetadata, check_method_name
+    from jarvis_hep_sampler.metadata import (
+        API_VERSION,
+        RESERVED_METHOD_NAMES,
+        PluginMetadata,
+        check_method_name,
+    )
     from jarvis_hep_sampler.options import (
         OptionIssue,
         ReservedSettings,

@@ -12,7 +12,7 @@ jsampler load MyLatinHypercube.py    # snapshot into ~/.jarvis/samplers; reloadi
 Jarvis run task.yaml                 # Sampling.Method: MyLatinHypercube
 ```
 
-`jsampler` is this package's command. It only sees samplers loaded into `~/.jarvis/samplers`. `Jarvis sampler` is Jarvis-HEP's command and also knows the built-in methods. `jsampler -v` prints this package's version. `jsampler --json` prints one plain JSON object. The SDK also supports offline Python use (see [Python API](#python-api)).
+`jsampler` is this package's command for creating and checking sampler files and managing registrations in `~/.jarvis/samplers`. Its `list` and `info` commands show registered external methods. `Jarvis sampler` is Jarvis-HEP's command and also knows the built-in methods. `jsampler -v` prints this package's version. `jsampler --json` prints one plain JSON object. The SDK also supports offline Python use (see [Python API](#python-api)).
 
 ## Scope
 
@@ -43,10 +43,10 @@ This package does not import Jarvis-HEP, Redis or Portal. `jsampler check --card
 
 ## Complete package installation
 
-Version 1.0.2. Install from PyPI:
+Version 1.0.3. Install from PyPI:
 
 ```bash
-python -m pip install "Jarvis-HEP-Sampler==1.0.2"
+python -m pip install "Jarvis-HEP-Sampler==1.0.3"
 ```
 
 From this repository:
@@ -55,7 +55,7 @@ From this repository:
 python -m pip install .
 ```
 
-Dependencies: NumPy, jsonschema, PyYAML and rich. A sampler-enabled Jarvis-HEP installs this SDK with `Jarvis-HEP-Sampler>=1.0.0,<2`.
+Dependencies: NumPy, jsonschema, PyYAML and rich. The current Jarvis-HEP source requires `Jarvis-HEP-Sampler>=1.0.3` without an upper bound. Version 1.0.3 includes the reserved-name and CLI changes.
 
 The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
@@ -118,7 +118,9 @@ Jarvis check examples/MyLatinHypercube.task.yaml
 Jarvis run examples/MyLatinHypercube.task.yaml
 ```
 
-`jsampler check` checks a sampler file, or a sampler already loaded by this package. A file does not need `load` first. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
+`jsampler check` accepts a sampler file only and does not need `load` first. It checks the method name before options, `prepare` or drawing points. For a loaded method, use `jsampler info <Method>` to find its source file, then check that file. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
+
+The command-line layout, errors, exit codes and JSON format follow the [Jarvis CLI design](https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP/blob/master/docs/JARVIS_CLI_DESIGN.md).
 
 Reloading the same method updates future scans. Removing the registration
 preserves an existing scan's bound source and its normal `Jarvis run ... --resume`

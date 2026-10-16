@@ -86,7 +86,12 @@ class LoadedPlugin:
         return self.functions.get(name)
 
 
-def load_plugin_file(path: str | Path, *, reserved_names: Iterable[str] = ()) -> LoadedPlugin:
+def load_plugin_file(
+    path: str | Path,
+    *,
+    reserved_names: Iterable[str] = (),
+    trusted_builtin_method: str | None = None,
+) -> LoadedPlugin:
     """Import the plug-in at *path* and check it against the file convention."""
     source = Path(path).expanduser()
     if not source.is_file():
@@ -96,11 +101,18 @@ def load_plugin_file(path: str | Path, *, reserved_names: Iterable[str] = ()) ->
         payload = resolved.read_bytes()
     except OSError as exc:
         raise PluginLoadError(f"cannot read {resolved}: {exc}", source=str(resolved)) from exc
-    return load_plugin_source(payload, origin=resolved, reserved_names=reserved_names)
+    kwargs: dict[str, Any] = {"origin": resolved, "reserved_names": reserved_names}
+    if trusted_builtin_method is not None:
+        kwargs["trusted_builtin_method"] = trusted_builtin_method
+    return load_plugin_source(payload, **kwargs)
 
 
 def load_plugin_source(
-    payload: bytes, *, origin: str | Path, reserved_names: Iterable[str] = ()
+    payload: bytes,
+    *,
+    origin: str | Path,
+    reserved_names: Iterable[str] = (),
+    trusted_builtin_method: str | None = None,
 ) -> LoadedPlugin:
     """Import a plug-in from its source bytes; *origin* names it in tracebacks."""
     origin_path = Path(origin)
@@ -128,6 +140,7 @@ def load_plugin_source(
             digest=digest,
             payload=payload,
             reserved_names=reserved_names,
+            trusted_builtin_method=trusted_builtin_method,
         )
     except PluginError:
         _restore_module(module_name, previous)
@@ -157,13 +170,18 @@ def _inspect_module(
     digest: str,
     payload: bytes,
     reserved_names: Iterable[str],
+    trusted_builtin_method: str | None,
 ) -> LoadedPlugin:
     namespace = module.__dict__
     source = str(origin)
     if "PLUGIN" not in namespace:
         raise PluginLoadError("the plug-in defines no PLUGIN dict", source=source)
     try:
-        metadata = parse_metadata(namespace["PLUGIN"], reserved_names=reserved_names)
+        metadata = parse_metadata(
+            namespace["PLUGIN"],
+            reserved_names=reserved_names,
+            trusted_builtin_method=trusted_builtin_method,
+        )
     except PluginLoadError as exc:
         exc.source = exc.source or source
         raise

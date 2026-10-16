@@ -22,6 +22,27 @@ SUPPORTED_PROFILES = (INDEPENDENT,)
 # Same shape as every built-in Sampling.Method name (Random, AdaptiveBridson, ...).
 METHOD_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9]{1,63}$")
 
+# Jarvis-HEP's built-in and shipped plug-in methods share one reserved namespace.
+# External plug-ins may never claim these names, regardless of letter case.
+RESERVED_METHOD_NAMES = frozenset({
+    "AMMCMC",
+    "AdaptiveBridson",
+    "Bridson",
+    "CSV",
+    "DEMCMC",
+    "DRAM",
+    "Dynesty",
+    "EnsembleMCMC",
+    "Grid",
+    "LatinHypercube",
+    "MCMC",
+    "MultiNest",
+    "PTEnsemble",
+    "PTMCMC",
+    "Random",
+    "ToyMCMC",
+})
+
 FEEDBACK_MODES = ("minimal", "fields", "all_flat")
 
 _REQUIRED_KEYS = ("api_version", "method", "version", "profile")
@@ -35,24 +56,37 @@ _OPTIONAL_KEYS = (
 _FEEDBACK_KEYS = frozenset({"mode", "fields", "include_logl"})
 
 
-def check_method_name(name: object, *, reserved_names: Iterable[str] = ()) -> str:
+def check_method_name(
+    name: object,
+    *,
+    reserved_names: Iterable[str] = (),
+    trusted_builtin_method: str | None = None,
+) -> str:
     """Return *name* if it is a valid plug-in method name, else raise.
 
-    *reserved_names* are the built-in Jarvis-HEP methods; a plug-in may not
-    take one of them, whatever the letter case.
+    The SDK's built-in names are always reserved; *reserved_names* can add
+    further names, never remove the SDK list. *trusted_builtin_method* is for
+    Jarvis-HEP's own packaged plug-in source only. It permits that one exact
+    canonical name after the caller has verified the trusted source.
     """
+    if trusted_builtin_method is not None and trusted_builtin_method not in RESERVED_METHOD_NAMES:
+        raise PluginLoadError(
+            f"trusted built-in method {trusted_builtin_method!r} is not an SDK reserved name"
+        )
     if not isinstance(name, str) or not METHOD_NAME_RE.fullmatch(name):
         raise PluginLoadError(
             f"method name {name!r} must start with an upper-case letter and use "
             "2-64 letters or digits, like the built-in methods (e.g. MyLatinHypercube)"
         )
     folded = name.casefold()
-    for reserved in reserved_names:
-        if folded == str(reserved).casefold():
-            raise PluginLoadError(
-                f"method name {name!r} is a built-in Jarvis-HEP method; choose another name",
-                method=name,
-            )
+    if name != trusted_builtin_method and any(
+        folded == str(reserved).casefold()
+        for reserved in (*RESERVED_METHOD_NAMES, *reserved_names)
+    ):
+        raise PluginLoadError(
+            f"method name {name!r} is a built-in Jarvis-HEP method; choose another name",
+            method=name,
+        )
     return name
 
 
@@ -93,7 +127,12 @@ class PluginMetadata:
         return data
 
 
-def parse_metadata(raw: object, *, reserved_names: Iterable[str] = ()) -> PluginMetadata:
+def parse_metadata(
+    raw: object,
+    *,
+    reserved_names: Iterable[str] = (),
+    trusted_builtin_method: str | None = None,
+) -> PluginMetadata:
     """Validate a ``PLUGIN`` dict and return it as :class:`PluginMetadata`."""
     if not isinstance(raw, Mapping):
         raise PluginLoadError(f"PLUGIN must be a dict, got {type(raw).__name__}")
@@ -123,7 +162,11 @@ def parse_metadata(raw: object, *, reserved_names: Iterable[str] = ()) -> Plugin
             f"API version {API_VERSION}"
         )
 
-    method = check_method_name(raw["method"], reserved_names=reserved_names)
+    method = check_method_name(
+        raw["method"],
+        reserved_names=reserved_names,
+        trusted_builtin_method=trusted_builtin_method,
+    )
 
     version = raw["version"]
     if not isinstance(version, str) or not version.strip():
@@ -203,6 +246,7 @@ __all__ = [
     "INDEPENDENT",
     "KNOWN_PROFILES",
     "METHOD_NAME_RE",
+    "RESERVED_METHOD_NAMES",
     "PluginMetadata",
     "SUPPORTED_PROFILES",
     "check_method_name",

@@ -141,7 +141,8 @@ def draw(context, rng, plan):
 
 def test_check_reports_load_errors(tmp_path: Path):
     report = check_plugin(tmp_path / "missing.py", dimension=1)
-    assert [item.name for item in report.items] == ["load"]
+    assert report.items[0].name == "method" and report.items[0].skipped
+    assert [item.name for item in report.failures()] == ["load"]
     assert not report.ok
 
 
@@ -183,7 +184,8 @@ def draw_block(context, rng, plan):
 
 def test_check_blocked_plugin(blocked_plugin):
     report = assert_conforms(blocked_plugin, dimension=2, point_number=10)
-    assert "block_size 4" in report.items[0].detail
+    assert report.items[0].name == "method"
+    assert "block_size 4" in report.items[1].detail
 
 
 def test_log_facade(caplog):

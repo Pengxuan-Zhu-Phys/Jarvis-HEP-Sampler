@@ -6,7 +6,7 @@ import sys
 import pytest
 
 from jarvis_hep_sampler.errors import PluginLoadError
-from jarvis_hep_sampler.loader import load_plugin_file
+from jarvis_hep_sampler.loader import load_plugin_file, load_plugin_source
 
 HEADER = """
 PLUGIN = {"api_version": 1, "method": "%s", "version": "1", "profile": "independent"%s}
@@ -74,7 +74,25 @@ PLUGIN = {"api_version": 1, "method": "Chain", "version": "1",
 
 def test_reserved_names(write_plugin):
     with pytest.raises(PluginLoadError, match="built-in"):
-        load_plugin_file(write_plugin(source(DRAW, method="Random")), reserved_names=["Random"])
+        load_plugin_file(write_plugin(source(DRAW, method="Random")))
+    with pytest.raises(PluginLoadError, match="built-in"):
+        load_plugin_file(write_plugin(source(DRAW, method="Grid")), reserved_names=[])
+
+
+def test_trusted_builtin_loader_allows_only_the_exact_expected_name(write_plugin):
+    path = write_plugin(source(DRAW, method="LatinHypercube"))
+    with pytest.raises(PluginLoadError, match="built-in"):
+        load_plugin_file(path)
+    loaded = load_plugin_file(path, trusted_builtin_method="LatinHypercube")
+    assert loaded.method == "LatinHypercube"
+    assert load_plugin_source(
+        path.read_bytes(), origin=path, trusted_builtin_method="LatinHypercube"
+    ).method == "LatinHypercube"
+    with pytest.raises(PluginLoadError, match="built-in"):
+        load_plugin_file(path, trusted_builtin_method="Grid")
+    other = write_plugin(source(DRAW, method="Grid"), "Grid.py")
+    with pytest.raises(PluginLoadError, match="built-in"):
+        load_plugin_file(other, trusted_builtin_method="LatinHypercube")
 
 
 def test_import_error_keeps_the_cause_and_cleans_sys_modules(write_plugin):

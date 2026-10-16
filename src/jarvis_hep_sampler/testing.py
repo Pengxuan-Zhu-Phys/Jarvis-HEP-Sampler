@@ -27,6 +27,7 @@ import numpy as np
 from jarvis_hep_sampler.errors import PluginError
 from jarvis_hep_sampler.loader import LoadedPlugin, load_plugin_file, load_plugin_source
 from jarvis_hep_sampler.log import SamplerLog
+from jarvis_hep_sampler.metadata import check_method_name
 from jarvis_hep_sampler.options import thaw_options
 from jarvis_hep_sampler.session import IndependentSession
 
@@ -171,6 +172,7 @@ class CheckItem:
     name: str
     ok: bool
     detail: str
+    skipped: bool = False
 
 
 @dataclass(frozen=True)
@@ -182,13 +184,16 @@ class CheckReport:
 
     @property
     def ok(self) -> bool:
-        return all(item.ok for item in self.items)
+        return bool(self.items) and all(item.ok for item in self.items if not item.skipped)
 
     def rows(self) -> list[tuple[str, str]]:
-        return [(item.name, f"{'ok' if item.ok else 'FAIL'}  {item.detail}") for item in self.items]
+        return [
+            (item.name, f"{'SKIP' if item.skipped else 'ok' if item.ok else 'FAIL'}  {item.detail}")
+            for item in self.items
+        ]
 
     def failures(self) -> list[CheckItem]:
-        return [item for item in self.items if not item.ok]
+        return [item for item in self.items if not item.ok and not item.skipped]
 
 
 def check_plugin(
@@ -204,7 +209,7 @@ def check_plugin(
 ) -> CheckReport:
     """Check a plug-in offline. Stops at the first failing stage; never raises for plug-in bugs.
 
-    Checks: load, options, prepare (with ``validate_options``), the output
+    Checks: method name, load, options, prepare (with ``validate_options``), the output
     contract for every candidate, repeatability with the same seed, restart
     from the middle (what a resume does), and the logging hooks. It does not
     judge whether the algorithm is scientifically right.
@@ -214,6 +219,11 @@ def check_plugin(
     def report(method: str | None = None) -> CheckReport:
         return CheckReport(method=method, items=tuple(items))
 
+    remaining = ("load", "options", "prepare", "draw", "repeatability", "resume", "hooks")
+
+    def skip(names: Sequence[str], reason: str) -> None:
+        items.extend(CheckItem(name, False, reason, skipped=True) for name in names)
+
     try:
         loaded = (
             plugin
@@ -221,9 +231,22 @@ def check_plugin(
             else load_plugin_file(plugin, reserved_names=reserved_names)
         )
     except PluginError as exc:
+        if exc.message.startswith("method name "):
+            items.append(CheckItem("method", False, str(exc)))
+            skip(remaining, "not run: method name rejected")
+            return report(exc.method)
+        items.append(CheckItem("method", False, "not run: plug-in did not load", skipped=True))
         items.append(CheckItem("load", False, str(exc)))
-        return report()
+        skip(remaining[1:], "not run: plug-in did not load")
+        return report(exc.method)
     meta = loaded.metadata
+    try:
+        check_method_name(meta.method, reserved_names=reserved_names)
+    except PluginError as exc:
+        items.append(CheckItem("method", False, str(exc)))
+        skip(remaining, "not run: method name rejected")
+        return report(meta.method)
+    items.append(CheckItem("method", True, f"{meta.method} is available for an external sampler"))
     items.append(
         CheckItem(
             "load",
