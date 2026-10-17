@@ -43,10 +43,10 @@ This package does not import Jarvis-HEP, Redis or Portal. `jsampler check --card
 
 ## Complete package installation
 
-Published package: Version 1.0.3. Install from PyPI:
+Published package: Version 1.1.1. Install from PyPI:
 
 ```bash
-python -m pip install "Jarvis-HEP-Sampler==1.0.3"
+python -m pip install "Jarvis-HEP-Sampler==1.1.1"
 ```
 
 From this repository:
@@ -55,7 +55,7 @@ From this repository:
 python -m pip install .
 ```
 
-Dependencies: NumPy, jsonschema, PyYAML and rich. The current Jarvis-HEP source requires host contract 2, which is in this source but not yet in a published release (see [CHANGELOG.md](CHANGELOG.md)); install this source for Jarvis-HEP development.
+Dependencies: NumPy, jsonschema, PyYAML and rich. Jarvis-HEP 2.1.0 and later require host contract 2, provided by Jarvis-HEP-Sampler 1.1.0 and later.
 
 The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
@@ -107,7 +107,7 @@ Sampling:
 The full contract is in [Plug-in authoring](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Jarvis-HEP-Sampler/PLUGIN_AUTHORING.md).
 
 A complete runnable card is provided in
-[examples/MyLatinHypercube.task.yaml](examples/MyLatinHypercube.task.yaml).
+[examples/MyLatinHypercube.task.yaml](https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP-Sampler/blob/main/examples/MyLatinHypercube.task.yaml).
 It uses Jarvis-HEP's bundled Eggbox demonstration operator:
 
 ```bash
@@ -128,7 +128,7 @@ workflow.
 
 ## Host integration
 
-`HOST_CONTRACT_VERSION = 2` identifies the host-facing interface in this source;
+`HOST_CONTRACT_VERSION = 2` identifies the host-facing interface since 1.1.0;
 plug-in `API_VERSION` and the stream protocol remain 1. `check_method_name` and
 `parse_metadata` validate syntax and structure. External `init`, registry `load`
 and `check_plugin` apply `check_external_method_name`; generic loaders accept
@@ -163,7 +163,7 @@ SamplerRegistry().load(path)                             # jsampler load
 
 - [Plug-in authoring](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Jarvis-HEP-Sampler/PLUGIN_AUTHORING.md)
 - [Developer documentation](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Jarvis-HEP-Sampler/README.md)
-- [Changelog](CHANGELOG.md)
+- [Changelog](https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP-Sampler/blob/main/CHANGELOG.md)
 
 ## Status
 
@@ -171,4 +171,4 @@ Alpha. API version 1 supports the independent execution contract; generational m
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Copyright (c) 2026 Pengxuan Zhu.
+MIT. See [LICENSE](https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP-Sampler/blob/main/LICENSE). Copyright (c) 2026 Pengxuan Zhu.

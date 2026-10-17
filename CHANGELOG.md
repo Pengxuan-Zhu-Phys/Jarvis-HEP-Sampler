@@ -4,10 +4,15 @@ Release history of the `Jarvis-HEP-Sampler` distribution (import package
 `jarvis_hep_sampler`, CLI `jsampler`). Developer documentation lives in
 [Jarvis-Books `Docs/Jarvis-HEP-Sampler/`](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Jarvis-HEP-Sampler/README.md).
 
-## Unreleased
+## 1.1.1 — 2026-10-18
 
-The version fields still read 1.0.3; this work is published under the next
-version. The current Jarvis-HEP source needs it (host contract 2).
+- The README, which is the PyPI project description, matches the published
+  version: the install pin and the host-contract note named 1.0.3. Links in it
+  are absolute so they work on PyPI.
+
+## 1.1.0 — 2026-10-18
+
+Required by Jarvis-HEP 2.1.0 (host contract 2).
 
 - `HOST_CONTRACT_VERSION = 2` marks the host-facing interface. Plug-in
   `API_VERSION` and the stream protocol stay 1.
