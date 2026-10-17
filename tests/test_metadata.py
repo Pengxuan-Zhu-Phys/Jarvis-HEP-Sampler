@@ -5,6 +5,7 @@ import pytest
 from jarvis_hep_sampler.errors import PluginLoadError
 from jarvis_hep_sampler.metadata import (
     RESERVED_METHOD_NAMES,
+    check_external_method_name,
     check_method_name,
     parse_metadata,
 )
@@ -53,9 +54,9 @@ def test_reserved_method_names_are_the_documented_builtin_catalog():
 @pytest.mark.parametrize("name", sorted(RESERVED_METHOD_NAMES))
 def test_builtin_names_are_reserved_by_default(name):
     with pytest.raises(PluginLoadError, match="built-in"):
-        check_method_name(name)
+        check_external_method_name(name)
     with pytest.raises(PluginLoadError, match="built-in"):
-        check_method_name(name.upper())
+        check_external_method_name(name.upper())
 
 
 @pytest.mark.parametrize(
@@ -77,26 +78,19 @@ def test_template_rejects_a_method_with_a_trailing_newline():
 
 def test_builtin_names_are_reserved_whatever_the_case():
     with pytest.raises(PluginLoadError, match="built-in"):
-        check_method_name("RANDOM", reserved_names=[])
+        check_external_method_name("RANDOM", reserved_names=[])
     with pytest.raises(PluginLoadError, match="built-in"):
-        check_method_name("OtherMethod", reserved_names=["OtherMethod"])
+        check_external_method_name("OtherMethod", reserved_names=["OtherMethod"])
     with pytest.raises(PluginLoadError, match="built-in"):
         render_template("Grid")
 
 
-def test_trusted_builtin_exception_is_exact_and_cannot_allow_other_reserved_names():
-    with pytest.raises(PluginLoadError, match="built-in"):
-        parse_metadata(meta(method="LatinHypercube"))
-    parsed = parse_metadata(
-        meta(method="LatinHypercube"), trusted_builtin_method="LatinHypercube"
-    )
-    assert parsed.method == "LatinHypercube"
-    with pytest.raises(PluginLoadError, match="built-in"):
-        parse_metadata(meta(method="LATINHYPERCUBE"), trusted_builtin_method="LatinHypercube")
-    with pytest.raises(PluginLoadError, match="built-in"):
-        parse_metadata(meta(method="Grid"), trusted_builtin_method="LatinHypercube")
-    with pytest.raises(PluginLoadError, match="not an SDK reserved name"):
-        check_method_name("MyRandom", trusted_builtin_method="MyRandom")
+@pytest.mark.parametrize("name", sorted(RESERVED_METHOD_NAMES))
+def test_metadata_only_checks_name_syntax_and_has_no_exemption(name):
+    assert parse_metadata(meta(method=name)).method == name
+    assert check_method_name(name) == name
+    with pytest.raises(TypeError):
+        parse_metadata(meta(method=name), trusted_builtin_method=name)
 
 
 @pytest.mark.parametrize(

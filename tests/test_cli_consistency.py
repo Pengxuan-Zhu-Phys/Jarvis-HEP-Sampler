@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 import pytest
@@ -106,7 +107,7 @@ def draw(context, rng, plan):
     assert [item.name for item in report.failures()] == ["method"]
     assert all(item.skipped for item in report.items[1:])
     assert not marker.exists()
-    assert main(["check", str(path), "--points", "4", "--json"]) == 1
+    assert main(["check", str(path), "--points", "4", "--json"]) == 2
     document = json.loads(capsys.readouterr().out)
     assert document["error"]["type"] == "CheckFailed"
     assert document["checks"][0]["name"] == "method"
@@ -147,3 +148,64 @@ def test_host_can_extend_list_and_info_help_without_parser_copy(capsys):
         assert f"Show {command} including built-in methods" in output
     assert main(["--json", "-h"], prog="Jarvis sampler") == 0
     assert json.loads(capsys.readouterr().out)["command"] == "sampler help"
+
+
+def test_host_catalog_uses_the_same_text_and_json_renderers(tmp_path, monkeypatch, capsys):
+    from jarvis_hep_sampler import cli
+
+    monkeypatch.setenv("JARVIS_SAMPLERS_HOME", str(tmp_path / "registry"))
+    host = {"method": "HostMethod", "version": "1", "profile": "independent",
+            "source": "host", "status": "built-in"}
+
+    def listing(payload):
+        return {**payload, "host_methods": [host]}
+
+    def info(method, payload):
+        if method == "HostMethod":
+            return {"ok": True, "command": "sampler info", **host,
+                    "conflicts": [{"method": "hostmethod", "problems": ["name conflict"],
+                                   "repair_command": "Jarvis sampler remove hostmethod --yes"}]}
+        return payload
+
+    extension = cli.CatalogExtension(listing, info, (("host_methods", "Host methods"),))
+    with mock.patch.object(cli, "_render_list_section", wraps=cli._render_list_section) as renderer:
+        assert main(["list"], catalog=extension) == 0
+        assert renderer.call_count == 2
+    text = capsys.readouterr().out
+    assert "No samplers loaded." in text and "Host methods" in text and "HostMethod" in text
+    assert main(["list", "--json"], catalog=extension) == 0
+    document = json.loads(capsys.readouterr().out)
+    assert document["samplers"] == [] and document["host_methods"] == [host]
+    with mock.patch.object(cli, "_render_info", wraps=cli._render_info) as renderer:
+        assert main(["info", "HostMethod"], catalog=extension) == 0
+        renderer.assert_called_once()
+    assert "remove hostmethod --yes" in capsys.readouterr().out
+    assert main(["info", "HostMethod", "--json"], catalog=extension) == 0
+    assert json.loads(capsys.readouterr().out)["conflicts"][0]["method"] == "hostmethod"
+
+
+def test_bad_output_remains_exit_one_while_reserved_check_is_exit_two(write_plugin, capsys):
+    path = write_plugin('''
+PLUGIN = {"api_version": 1, "method": "BadOutput", "version": "1", "profile": "independent"}
+def draw(context, rng, plan):
+    return [float("nan")] * context.dimension
+''')
+    assert main(["check", str(path), "--json"]) == 1
+    document = json.loads(capsys.readouterr().out)
+    assert document["checks"][0]["ok"] is True
+    assert document["error"]["type"] == "CheckFailed"
+
+
+def test_reserved_name_precedes_even_invalid_options_schema(write_plugin, capsys):
+    path = write_plugin('''
+PLUGIN = {"api_version": 1, "method": "Grid", "version": "1", "profile": "independent"}
+OPTIONS_SCHEMA = {"type": 42}
+def draw(context, rng, plan):
+    raise AssertionError("draw must not execute")
+''')
+    assert main(["check", str(path), "--json"]) == 2
+    document = json.loads(capsys.readouterr().out)
+    assert "built-in" in document["checks"][0]["detail"]
+    assert all(item["skipped"] for item in document["checks"][1:])
+    assert main(["load", str(path), "--json"]) == 2
+    assert "built-in" in json.loads(capsys.readouterr().out)["error"]["message"]

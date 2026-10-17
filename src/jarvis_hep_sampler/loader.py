@@ -15,7 +15,7 @@ import hashlib
 import inspect
 import sys
 import types
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -87,10 +87,7 @@ class LoadedPlugin:
 
 
 def load_plugin_file(
-    path: str | Path,
-    *,
-    reserved_names: Iterable[str] = (),
-    trusted_builtin_method: str | None = None,
+    path: str | Path, *, metadata_validator: Callable[[PluginMetadata], object] | None = None,
 ) -> LoadedPlugin:
     """Import the plug-in at *path* and check it against the file convention."""
     source = Path(path).expanduser()
@@ -101,18 +98,14 @@ def load_plugin_file(
         payload = resolved.read_bytes()
     except OSError as exc:
         raise PluginLoadError(f"cannot read {resolved}: {exc}", source=str(resolved)) from exc
-    kwargs: dict[str, Any] = {"origin": resolved, "reserved_names": reserved_names}
-    if trusted_builtin_method is not None:
-        kwargs["trusted_builtin_method"] = trusted_builtin_method
-    return load_plugin_source(payload, **kwargs)
+    return load_plugin_source(payload, origin=resolved, metadata_validator=metadata_validator)
 
 
 def load_plugin_source(
     payload: bytes,
     *,
     origin: str | Path,
-    reserved_names: Iterable[str] = (),
-    trusted_builtin_method: str | None = None,
+    metadata_validator: Callable[[PluginMetadata], object] | None = None,
 ) -> LoadedPlugin:
     """Import a plug-in from its source bytes; *origin* names it in tracebacks."""
     origin_path = Path(origin)
@@ -139,8 +132,7 @@ def load_plugin_source(
             origin=origin_path,
             digest=digest,
             payload=payload,
-            reserved_names=reserved_names,
-            trusted_builtin_method=trusted_builtin_method,
+            metadata_validator=metadata_validator,
         )
     except PluginError:
         _restore_module(module_name, previous)
@@ -169,19 +161,16 @@ def _inspect_module(
     origin: Path,
     digest: str,
     payload: bytes,
-    reserved_names: Iterable[str],
-    trusted_builtin_method: str | None,
+    metadata_validator: Callable[[PluginMetadata], object] | None,
 ) -> LoadedPlugin:
     namespace = module.__dict__
     source = str(origin)
     if "PLUGIN" not in namespace:
         raise PluginLoadError("the plug-in defines no PLUGIN dict", source=source)
     try:
-        metadata = parse_metadata(
-            namespace["PLUGIN"],
-            reserved_names=reserved_names,
-            trusted_builtin_method=trusted_builtin_method,
-        )
+        metadata = parse_metadata(namespace["PLUGIN"])
+        if metadata_validator is not None:
+            metadata_validator(metadata)
     except PluginLoadError as exc:
         exc.source = exc.source or source
         raise

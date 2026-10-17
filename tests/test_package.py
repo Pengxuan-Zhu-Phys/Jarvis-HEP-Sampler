@@ -20,7 +20,7 @@ def test_versions_match():
 
 def test_public_names_resolve():
     lazy = set(jarvis_hep_sampler._LAZY_ATTRS)
-    assert set(jarvis_hep_sampler.__all__) == lazy | {"__version__"}
+    assert set(jarvis_hep_sampler.__all__) == lazy | {"__version__", "HOST_CONTRACT_VERSION"}
     for name in jarvis_hep_sampler.__all__:
         assert getattr(jarvis_hep_sampler, name) is not None
     assert "SamplerRegistry" in dir(jarvis_hep_sampler)

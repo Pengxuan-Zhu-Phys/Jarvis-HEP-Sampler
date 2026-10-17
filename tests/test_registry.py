@@ -237,7 +237,7 @@ def test_snapshot_read_is_locked_but_import_can_change_registry(
                 fcntl.flock(probe.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         return read_snapshot(current)
 
-    def change_before_import(payload, *, origin, reserved_names=()):
+    def change_before_import(payload, *, origin, metadata_validator=None):
         if origin == snapshot:
             with open(registry.lock_path, "a+") as probe:
                 fcntl.flock(probe.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -246,7 +246,7 @@ def test_snapshot_read_is_locked_but_import_can_change_registry(
                 registry.load(uniform_plugin)
             else:
                 registry.remove("Uniform")
-        return execute(payload, origin=origin, reserved_names=reserved_names)
+        return execute(payload, origin=origin, metadata_validator=metadata_validator)
 
     monkeypatch.setattr(registry, "_read_snapshot", locked_read)
     monkeypatch.setattr(loader_module, "load_plugin_source", change_before_import)

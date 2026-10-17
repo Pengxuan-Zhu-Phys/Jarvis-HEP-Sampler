@@ -1,7 +1,7 @@
-"""``jsampler``: the command for samplers loaded by this package.
+"""``jsampler`` owns parsing and rendering for registered and host samplers.
 
-It reads and writes the user registry. It does not know Jarvis-HEP's built-in
-methods. ``check --card`` reads Variables and Bounds from the task YAML.
+The SDK reads the user registry; optional host hooks supply additional catalog
+data. ``check --card`` reads Variables and Bounds from the task YAML.
 """
 
 from __future__ import annotations
@@ -11,8 +11,9 @@ import json
 import os
 import shutil
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,20 @@ EXIT_RUN_FAILED = 1
 EXIT_USAGE = 2
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _AS_JSON: ContextVar[bool] = ContextVar("jsampler_json", default=False)
+
+
+@dataclass(frozen=True)
+class CatalogExtension:
+    """Host data hooks; parsing, errors, JSON and text rendering stay in the SDK.
+
+    Hooks receive the SDK result and may add fields without removing existing
+    ones. ``list_sections`` names additional row arrays and their panel titles.
+    ``resolve_info`` may supply a host method when no exact registration exists.
+    """
+
+    augment_list: Callable[[dict[str, Any]], dict[str, Any]]
+    resolve_info: Callable[[str, dict[str, Any] | None], dict[str, Any] | None]
+    list_sections: tuple[tuple[str, str], ...] = ()
 
 
 def _json_options() -> argparse.ArgumentParser:
@@ -308,6 +323,7 @@ def main(
     prog: str = "jsampler",
     command_help: Mapping[str, str] | None = None,
     command_description: Mapping[str, str] | None = None,
+    catalog: CatalogExtension | None = None,
 ) -> int:
     """Run ``jsampler``. ``argv`` defaults to ``sys.argv[1:]``."""
     args = list(sys.argv[1:] if argv is None else argv)
@@ -329,12 +345,15 @@ def main(
             parsed = parser.parse_args(args)
         except SystemExit as exc:
             return int(exc.code or EXIT_USAGE)
-        return _dispatch(prog, parser, parsed)
+        return _dispatch(prog, parser, parsed, catalog=catalog)
     finally:
         _AS_JSON.reset(token)
 
 
-def _dispatch(prog: str, parser: argparse.ArgumentParser, parsed: Any) -> int:
+def _dispatch(
+    prog: str, parser: argparse.ArgumentParser, parsed: Any, *,
+    catalog: CatalogExtension | None = None,
+) -> int:
     if parsed.version:
         if _json():
             _print_json({
@@ -353,9 +372,9 @@ def _dispatch(prog: str, parser: argparse.ArgumentParser, parsed: Any) -> int:
     if command == "load":
         return _run_load(prog, parsed.file)
     if command == "list":
-        return _run_list(prog)
+        return _run_list(prog, catalog=catalog)
     if command == "info":
-        return _run_info(prog, parsed.method)
+        return _run_info(prog, parsed.method, catalog=catalog)
     if command == "remove":
         return _run_remove(prog, parsed.method, yes=bool(parsed.yes))
     parser.print_help()
@@ -620,7 +639,7 @@ def _run_check(prog: str, args: Any) -> int:
             ),
             border="green" if report.ok else "red",
         )
-    return EXIT_OK if report.ok else EXIT_RUN_FAILED
+    return EXIT_OK if report.ok else EXIT_USAGE if report.input_error else EXIT_RUN_FAILED
 
 
 def _run_load(prog: str, file: str) -> int:
@@ -691,120 +710,132 @@ def _status(registry: Any, entry: Any) -> str:
 def _status_text(status: str) -> Text:
     if status == "ok":
         style = "bold green"
-    elif status.startswith("broken") or "missing" in status:
+    elif status == "built-in":
+        style = "bold cyan"
+    elif any(word in status for word in ("broken", "missing", "conflict")):
         style = "bold red"
     else:
         style = "bold yellow"
     return Text(status, style=style)
 
 
-def _run_list(prog: str) -> int:
-    from jarvis_hep_sampler import SamplerRegistry
-    from jarvis_hep_sampler.errors import RegistryError
-
-    registry = SamplerRegistry()
-    try:
-        entries = registry.entries()
-    except RegistryError as exc:
-        return _error(
-            prog, str(exc), command="list", error_type="RegistryError",
-            hint=(f"Repair the registry at {registry.home} or restore it from a backup, "
-                  f"then run {prog} list."),
-        )
-    listed = [
-        {
-            "method": method,
-            "profile": entry.profile,
-            "source": entry.source_path,
-            "status": _status(registry, entry),
-            "version": entry.version,
-        }
-        for method, entry in entries.items()
-    ]
-    if _json():
-        _print_json({
-            "command": _command_path(prog, "list"),
-            "ok": True,
-            "registry": str(registry.home),
-            "samplers": listed,
-        })
-        return EXIT_OK
+def _render_list_section(
+    title: str, listed: list[dict[str, Any]], *, registry: str | None = None,
+) -> None:
     table = Table(box=box.SIMPLE_HEAVY, show_header=True, header_style="bold dim")
     for name in ("Method", "Version", "Profile", "Source", "Status"):
         table.add_column(name.upper(), overflow="fold")
     for item in listed:
         table.add_row(
             Text(item["method"], style="bold #c8c8ff"),
-            item["version"],
-            item["profile"],
-            Text(item["source"], style="dim"),
-            _status_text(item["status"]),
+            item["version"], item["profile"],
+            Text(item["source"], style="dim"), _status_text(item["status"]),
         )
-    body: Any = table
-    if not listed:
-        body = Group(table, Text("No samplers loaded.", style="dim"))
-    _console().print(
-        Panel(
-            Group(body, Text(""), Text(f"Registry: {registry.home}", style="dim")),
-            title=Text("Loaded samplers", style="bold"),
-            box=box.ROUNDED,
-            border_style="dim",
-            padding=(0, 1),
+    body: Any = table if listed else Group(table, Text("No samplers loaded.", style="dim"))
+    if registry is not None:
+        body = Group(body, Text(""), Text(f"Registry: {registry}", style="dim"))
+    _console().print(Panel(body, title=Text(title, style="bold"), box=box.ROUNDED,
+                           border_style="dim", padding=(0, 1)))
+    for item in listed:
+        if item.get("repair_command"):
+            _console().print(f"{item['method']}: {item['repair_command']}")
+
+
+def _run_list(prog: str, *, catalog: CatalogExtension | None = None) -> int:
+    from jarvis_hep_sampler import SamplerRegistry
+    from jarvis_hep_sampler.errors import PluginError
+
+    registry = SamplerRegistry()
+    try:
+        entries = registry.entries()
+        payload: dict[str, Any] = {
+            "command": _command_path(prog, "list"), "ok": True,
+            "registry": str(registry.home),
+            "samplers": [
+                {"method": method, "profile": entry.profile, "source": entry.source_path,
+                 "status": _status(registry, entry), "version": entry.version}
+                for method, entry in entries.items()
+            ],
+        }
+        if catalog is not None:
+            payload = catalog.augment_list(payload)
+    except (PluginError, OSError) as exc:
+        return _error(
+            prog, str(exc), command="list", error_type=type(exc).__name__,
+            hint=(f"Repair the registry at {registry.home} or restore it from a backup, "
+                  f"then run {prog} list."),
         )
-    )
+    if _json():
+        _print_json(payload)
+    else:
+        _render_list_section("Loaded samplers", payload["samplers"], registry=payload["registry"])
+        if catalog is not None:
+            for key, title in catalog.list_sections:
+                _render_list_section(title, payload.get(key, []))
     return EXIT_OK
 
 
-def _run_info(prog: str, method: str) -> int:
+def _info_payload(prog: str, registry: Any, entry: Any) -> dict[str, Any]:
+    return {
+        "command": _command_path(prog, "info"), "description": entry.description,
+        "functions": list(entry.hooks), "loaded_at": entry.loaded_at,
+        "method": entry.method, "ok": True, "options_schema": entry.options_schema is not None,
+        "profile": entry.profile, "sha256": entry.source_sha256,
+        "snapshot": str(registry.snapshot_path(entry)), "source": entry.source_path,
+        "statistical": entry.statistical, "status": _status(registry, entry),
+        "version": entry.version,
+    }
+
+
+def _render_info(payload: dict[str, Any]) -> None:
+    rows: list[tuple[str, Any]] = []
+    for key in ("version", "profile", "family", "description", "statistical", "options_schema",
+                "functions", "source", "snapshot", "sha256", "loaded_at", "status"):
+        if key not in payload:
+            continue
+        value = payload[key]
+        if key in {"statistical", "options_schema"}:
+            value = "yes" if value else "no"
+        elif key == "functions":
+            value = ", ".join(value)
+        rows.append((key.replace("_", " "), value or "—"))
+    if payload.get("problems"):
+        rows.append(("problem", "; ".join(payload["problems"])))
+    if payload.get("repair_command"):
+        rows.append(("repair", payload["repair_command"]))
+    for conflict in payload.get("conflicts", []):
+        rows.append(("conflict", f"{conflict['method']}: {'; '.join(conflict['problems'])}"))
+        if conflict.get("repair_command"):
+            rows.append(("repair", conflict["repair_command"]))
+    note = f"Manual: {payload['manual']}" if payload.get("manual") else ""
+    _panel(f"Sampler · {payload['method']}", rows, note=note)
+
+
+def _run_info(prog: str, method: str, *, catalog: CatalogExtension | None = None) -> int:
     from jarvis_hep_sampler import SamplerRegistry
-    from jarvis_hep_sampler.errors import RegistryError
+    from jarvis_hep_sampler.errors import PluginError
 
     registry = SamplerRegistry()
     try:
         entry = registry.get(method)
-    except RegistryError as exc:
+        payload = _info_payload(prog, registry, entry) if entry is not None else None
+        if catalog is not None:
+            payload = catalog.resolve_info(method, payload)
+    except (PluginError, OSError) as exc:
         return _error(
-            prog, str(exc), command="info", error_type="RegistryError",
+            prog, str(exc), command="info", error_type=type(exc).__name__,
             hint=(f"Repair the registry at {registry.home} or restore it from a backup, "
                   f"then run {prog} info {method}."),
         )
-    if entry is None:
+    if payload is None:
         return _error(
             prog, f"no loaded sampler named {method!r}", command="info",
             error_type="RegistryError", hint=f"Run {prog} list to see loaded samplers.",
         )
-    status = _status(registry, entry)
     if _json():
-        _print_json({
-            "command": _command_path(prog, "info"),
-            "description": entry.description,
-            "functions": list(entry.hooks),
-            "loaded_at": entry.loaded_at,
-            "method": entry.method,
-            "ok": True,
-            "options_schema": entry.options_schema is not None,
-            "profile": entry.profile,
-            "sha256": entry.source_sha256,
-            "snapshot": str(registry.snapshot_path(entry)),
-            "source": entry.source_path,
-            "statistical": entry.statistical,
-            "status": status,
-            "version": entry.version,
-        })
-        return EXIT_OK
-    _panel(f"Sampler · {entry.method}", [
-        ("version", entry.version),
-        ("profile", entry.profile),
-        ("description", entry.description or "—"),
-        ("statistical", "yes" if entry.statistical else "no"),
-        ("options schema", "yes" if entry.options_schema is not None else "no"),
-        ("functions", ", ".join(entry.hooks)),
-        ("source", entry.source_path),
-        ("snapshot", registry.snapshot_path(entry)),
-        ("sha256", entry.source_sha256),
-        ("loaded at", entry.loaded_at),
-        ("status", status),
-    ])
+        _print_json(payload)
+    else:
+        _render_info(payload)
     return EXIT_OK
 
 

@@ -56,30 +56,21 @@ _OPTIONAL_KEYS = (
 _FEEDBACK_KEYS = frozenset({"mode", "fields", "include_logl"})
 
 
-def check_method_name(
-    name: object,
-    *,
-    reserved_names: Iterable[str] = (),
-    trusted_builtin_method: str | None = None,
-) -> str:
-    """Return *name* if it is a valid plug-in method name, else raise.
-
-    The SDK's built-in names are always reserved; *reserved_names* can add
-    further names, never remove the SDK list. *trusted_builtin_method* is for
-    Jarvis-HEP's own packaged plug-in source only. It permits that one exact
-    canonical name after the caller has verified the trusted source.
-    """
-    if trusted_builtin_method is not None and trusted_builtin_method not in RESERVED_METHOD_NAMES:
-        raise PluginLoadError(
-            f"trusted built-in method {trusted_builtin_method!r} is not an SDK reserved name"
-        )
+def check_method_name(name: object) -> str:
+    """Validate name syntax, including names used by packaged samplers."""
     if not isinstance(name, str) or not METHOD_NAME_RE.fullmatch(name):
         raise PluginLoadError(
             f"method name {name!r} must start with an upper-case letter and use "
             "2-64 letters or digits, like the built-in methods (e.g. MyLatinHypercube)"
         )
+    return name
+
+
+def check_external_method_name(name: object, *, reserved_names: Iterable[str] = ()) -> str:
+    """Apply the external-name policy at init, registry load and check only."""
+    name = check_method_name(name)
     folded = name.casefold()
-    if name != trusted_builtin_method and any(
+    if any(
         folded == str(reserved).casefold()
         for reserved in (*RESERVED_METHOD_NAMES, *reserved_names)
     ):
@@ -127,12 +118,7 @@ class PluginMetadata:
         return data
 
 
-def parse_metadata(
-    raw: object,
-    *,
-    reserved_names: Iterable[str] = (),
-    trusted_builtin_method: str | None = None,
-) -> PluginMetadata:
+def parse_metadata(raw: object) -> PluginMetadata:
     """Validate a ``PLUGIN`` dict and return it as :class:`PluginMetadata`."""
     if not isinstance(raw, Mapping):
         raise PluginLoadError(f"PLUGIN must be a dict, got {type(raw).__name__}")
@@ -162,11 +148,7 @@ def parse_metadata(
             f"API version {API_VERSION}"
         )
 
-    method = check_method_name(
-        raw["method"],
-        reserved_names=reserved_names,
-        trusted_builtin_method=trusted_builtin_method,
-    )
+    method = check_method_name(raw["method"])
 
     version = raw["version"]
     if not isinstance(version, str) or not version.strip():
@@ -249,6 +231,7 @@ __all__ = [
     "RESERVED_METHOD_NAMES",
     "PluginMetadata",
     "SUPPORTED_PROFILES",
+    "check_external_method_name",
     "check_method_name",
     "parse_metadata",
 ]

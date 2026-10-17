@@ -72,27 +72,13 @@ PLUGIN = {"api_version": 1, "method": "Chain", "version": "1",
         load_plugin_file(write_plugin(text))
 
 
-def test_reserved_names(write_plugin):
-    with pytest.raises(PluginLoadError, match="built-in"):
-        load_plugin_file(write_plugin(source(DRAW, method="Random")))
-    with pytest.raises(PluginLoadError, match="built-in"):
-        load_plugin_file(write_plugin(source(DRAW, method="Grid")), reserved_names=[])
-
-
-def test_trusted_builtin_loader_allows_only_the_exact_expected_name(write_plugin):
-    path = write_plugin(source(DRAW, method="LatinHypercube"))
-    with pytest.raises(PluginLoadError, match="built-in"):
-        load_plugin_file(path)
-    loaded = load_plugin_file(path, trusted_builtin_method="LatinHypercube")
-    assert loaded.method == "LatinHypercube"
-    assert load_plugin_source(
-        path.read_bytes(), origin=path, trusted_builtin_method="LatinHypercube"
-    ).method == "LatinHypercube"
-    with pytest.raises(PluginLoadError, match="built-in"):
-        load_plugin_file(path, trusted_builtin_method="Grid")
-    other = write_plugin(source(DRAW, method="Grid"), "Grid.py")
-    with pytest.raises(PluginLoadError, match="built-in"):
-        load_plugin_file(other, trusted_builtin_method="LatinHypercube")
+@pytest.mark.parametrize("name", ["Random", "Grid", "LatinHypercube"])
+def test_generic_loader_accepts_packaged_names_without_policy_or_exemption(write_plugin, name):
+    path = write_plugin(source(DRAW, method=name))
+    assert load_plugin_file(path).method == name
+    assert load_plugin_source(path.read_bytes(), origin=path).method == name
+    with pytest.raises(TypeError):
+        load_plugin_file(path, trusted_builtin_method=name)
 
 
 def test_import_error_keeps_the_cause_and_cleans_sys_modules(write_plugin):

@@ -27,7 +27,7 @@ import numpy as np
 from jarvis_hep_sampler.errors import PluginError
 from jarvis_hep_sampler.loader import LoadedPlugin, load_plugin_file, load_plugin_source
 from jarvis_hep_sampler.log import SamplerLog
-from jarvis_hep_sampler.metadata import check_method_name
+from jarvis_hep_sampler.metadata import check_external_method_name
 from jarvis_hep_sampler.options import thaw_options
 from jarvis_hep_sampler.session import IndependentSession
 
@@ -181,6 +181,7 @@ class CheckReport:
 
     method: str | None
     items: tuple[CheckItem, ...]
+    input_error: bool = False
 
     @property
     def ok(self) -> bool:
@@ -216,8 +217,8 @@ def check_plugin(
     """
     items: list[CheckItem] = []
 
-    def report(method: str | None = None) -> CheckReport:
-        return CheckReport(method=method, items=tuple(items))
+    def report(method: str | None = None, *, input_error: bool = False) -> CheckReport:
+        return CheckReport(method=method, items=tuple(items), input_error=input_error)
 
     remaining = ("load", "options", "prepare", "draw", "repeatability", "resume", "hooks")
 
@@ -228,24 +229,28 @@ def check_plugin(
         loaded = (
             plugin
             if isinstance(plugin, LoadedPlugin)
-            else load_plugin_file(plugin, reserved_names=reserved_names)
+            else load_plugin_file(
+                plugin, metadata_validator=lambda meta: check_external_method_name(
+                    meta.method, reserved_names=reserved_names,
+                ),
+            )
         )
     except PluginError as exc:
         if exc.message.startswith("method name "):
             items.append(CheckItem("method", False, str(exc)))
             skip(remaining, "not run: method name rejected")
-            return report(exc.method)
+            return report(exc.method, input_error=True)
         items.append(CheckItem("method", False, "not run: plug-in did not load", skipped=True))
         items.append(CheckItem("load", False, str(exc)))
         skip(remaining[1:], "not run: plug-in did not load")
         return report(exc.method)
     meta = loaded.metadata
     try:
-        check_method_name(meta.method, reserved_names=reserved_names)
+        check_external_method_name(meta.method, reserved_names=reserved_names)
     except PluginError as exc:
         items.append(CheckItem("method", False, str(exc)))
         skip(remaining, "not run: method name rejected")
-        return report(meta.method)
+        return report(meta.method, input_error=True)
     items.append(CheckItem("method", True, f"{meta.method} is available for an external sampler"))
     items.append(
         CheckItem(

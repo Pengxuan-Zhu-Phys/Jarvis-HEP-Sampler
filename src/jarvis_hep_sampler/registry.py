@@ -284,8 +284,13 @@ class SamplerRegistry:
     def load(self, path: str | Path, *, reserved_names: Iterable[str] = ()) -> LoadResult:
         """Import *path*, check it, snapshot it and record it (replacing the same method)."""
         from jarvis_hep_sampler.loader import load_plugin_file
+        from jarvis_hep_sampler.metadata import check_external_method_name
 
-        plugin = load_plugin_file(path, reserved_names=reserved_names)
+        plugin = load_plugin_file(
+            path, metadata_validator=lambda meta: check_external_method_name(
+                meta.method, reserved_names=reserved_names,
+            ),
+        )
         method = plugin.method
         entry = RegistryEntry(
             method=method,

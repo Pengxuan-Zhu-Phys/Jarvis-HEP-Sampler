@@ -43,7 +43,7 @@ This package does not import Jarvis-HEP, Redis or Portal. `jsampler check --card
 
 ## Complete package installation
 
-Version 1.0.3. Install from PyPI:
+Published package: Version 1.0.3. Install from PyPI:
 
 ```bash
 python -m pip install "Jarvis-HEP-Sampler==1.0.3"
@@ -55,7 +55,7 @@ From this repository:
 python -m pip install .
 ```
 
-Dependencies: NumPy, jsonschema, PyYAML and rich. The current Jarvis-HEP source requires `Jarvis-HEP-Sampler>=1.0.3` without an upper bound. Version 1.0.3 includes the reserved-name and CLI changes.
+Dependencies: NumPy, jsonschema, PyYAML and rich. The current Jarvis-HEP source keeps `Jarvis-HEP-Sampler>=1.0.3` without an upper bound and requires host contract 2. This checkout contains the unreleased follow-up with that contract; public 1.0.3 contains the earlier implementation. Package version fields remain unchanged in this work. Install this source for development; the maintainer will publish the next SDK and then update the HEP minimum.
 
 The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
@@ -118,13 +118,29 @@ Jarvis check examples/MyLatinHypercube.task.yaml
 Jarvis run examples/MyLatinHypercube.task.yaml
 ```
 
-`jsampler check` accepts a sampler file only and does not need `load` first. It checks the method name before options, `prepare` or drawing points. For a loaded method, use `jsampler info <Method>` to find its source file, then check that file. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
+`jsampler check` accepts a sampler file only and does not need `load` first. It checks the method name before options schema, `prepare` or drawing points. A reserved-name failure returns exit 2; algorithm output or repeatability failures return exit 1. For a loaded method, use `jsampler info <Method>` to find its source file, then check that file. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
 
 The command-line layout, errors, exit codes and JSON format follow the [Jarvis CLI design](https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP/blob/master/docs/JARVIS_CLI_DESIGN.md).
 
 Reloading the same method updates future scans. Removing the registration
 preserves an existing scan's bound source and its normal `Jarvis run ... --resume`
 workflow.
+
+## Host integration
+
+`HOST_CONTRACT_VERSION = 2` identifies the host-facing interface in this source;
+plug-in `API_VERSION` and the stream protocol remain 1. `check_method_name` and
+`parse_metadata` validate syntax and structure. External `init`, registry `load`
+and `check_plugin` apply `check_external_method_name`; generic loaders accept
+packaged names without a trusted-name override. Entry policies run through the
+optional `metadata_validator` loader hook before options schemas and hooks.
+
+`jarvis_hep_sampler.cli.main(..., catalog=CatalogExtension(...))` accepts host
+data callbacks `augment_list(payload)` and `resolve_info(method, payload)`, plus
+`list_sections=((payload_key, panel_title), ...)`. They add fields to the SDK
+results; parsing, errors and both text/JSON rendering stay in the SDK. Host
+`info` can include `conflicts` with exact method names, problems and removal
+commands. Existing JSON fields remain intact.
 
 ## Python API
 

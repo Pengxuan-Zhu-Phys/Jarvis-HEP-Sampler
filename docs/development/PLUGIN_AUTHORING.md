@@ -33,7 +33,7 @@ You may import any library installed in your environment. Missing imports fail a
 | `statistical` | no | `True` turns on the same Mapper warnings as the statistical built-in methods. It does not make your points posterior samples |
 | `block_size` | no | Use `draw_block` with blocks of this size instead of `draw` |
 
-Unknown keys are an error, so a typo cannot pass silently.
+Unknown keys are an error, so a typo cannot pass silently. External `init`, `load` and `check` enforce the reserved-name rule. Generic metadata parsing and runtime loading only validate syntax and structure; packaged samplers need no exception. A reserved-name failure from `check` exits 2 before options schemas or sampler hooks. Algorithm checks that run and fail exit 1.
 
 ## Bounds: reserved keys and your options
 

@@ -19,11 +19,15 @@ from typing import TYPE_CHECKING, Any
 
 from jarvis_hep_sampler._version import __version__
 
+# Host integration contract; independent of plug-in API_VERSION/stream protocol.
+HOST_CONTRACT_VERSION = 2
+
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     # metadata
     "API_VERSION": ("jarvis_hep_sampler.metadata", "API_VERSION"),
     "PluginMetadata": ("jarvis_hep_sampler.metadata", "PluginMetadata"),
     "RESERVED_METHOD_NAMES": ("jarvis_hep_sampler.metadata", "RESERVED_METHOD_NAMES"),
+    "check_external_method_name": ("jarvis_hep_sampler.metadata", "check_external_method_name"),
     "check_method_name": ("jarvis_hep_sampler.metadata", "check_method_name"),
     # contexts and logging
     "BlockContext": ("jarvis_hep_sampler.contexts", "BlockContext"),
@@ -87,6 +91,8 @@ __all__ = [
     "SamplerStats",
     "SetupContext",
     "__version__",
+    "HOST_CONTRACT_VERSION",
+    "check_external_method_name",
     "check_method_name",
     "load_plugin_file",
     "load_plugin_source",
@@ -114,6 +120,7 @@ if TYPE_CHECKING:
         API_VERSION,
         RESERVED_METHOD_NAMES,
         PluginMetadata,
+        check_external_method_name,
         check_method_name,
     )
     from jarvis_hep_sampler.options import (

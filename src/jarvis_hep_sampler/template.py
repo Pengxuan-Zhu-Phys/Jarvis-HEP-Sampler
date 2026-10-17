@@ -7,7 +7,7 @@ from importlib import resources
 from pathlib import Path
 
 from jarvis_hep_sampler.errors import PluginLoadError
-from jarvis_hep_sampler.metadata import INDEPENDENT, SUPPORTED_PROFILES, check_method_name
+from jarvis_hep_sampler.metadata import INDEPENDENT, SUPPORTED_PROFILES, check_external_method_name
 
 PLACEHOLDER = "__METHOD__"
 
@@ -16,7 +16,7 @@ def render_template(
     method: str, *, profile: str = INDEPENDENT, reserved_names: Iterable[str] = ()
 ) -> str:
     """Return the template text for *method*."""
-    check_method_name(method, reserved_names=reserved_names)
+    check_external_method_name(method, reserved_names=reserved_names)
     if profile not in SUPPORTED_PROFILES:
         raise PluginLoadError(
             f"no template for profile {profile!r}; available: {', '.join(SUPPORTED_PROFILES)}"
