@@ -22,13 +22,9 @@ env/
 /jhsrel
 /scripts/
 
-# Development records
+# Documentation lives in Jarvis-Books/Docs; a local docs/ is never committed.
+/docs/
 /CONTRIBUTING.md
-/docs/development/DEVELOPMENT.md
-/docs/development/DEVELOPMENT_LEDGER.md
-/docs/development/M1_VERIFICATION.md
-/docs/development/M2_VERIFICATION.md
-/docs/release/
 
 # Maintainer automation
 /.github/

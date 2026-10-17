@@ -55,7 +55,7 @@ From this repository:
 python -m pip install .
 ```
 
-Dependencies: NumPy, jsonschema, PyYAML and rich. The current Jarvis-HEP source keeps `Jarvis-HEP-Sampler>=1.0.3` without an upper bound and requires host contract 2. This checkout contains the unreleased follow-up with that contract; public 1.0.3 contains the earlier implementation. Package version fields remain unchanged in this work. Install this source for development; the maintainer will publish the next SDK and then update the HEP minimum.
+Dependencies: NumPy, jsonschema, PyYAML and rich. The current Jarvis-HEP source requires host contract 2, which is in this source but not yet in a published release (see [CHANGELOG.md](CHANGELOG.md)); install this source for Jarvis-HEP development.
 
 The end-to-end user tutorial lives in Jarvis-Books, in the TeX manual chapter **Jarvis-HEP-Sampler: Implementing Your Own Sampler** (`TeX/Jarvis-HEP-V2 manual`).
 
@@ -104,7 +104,7 @@ Sampling:
     centered: false
 ```
 
-The full contract is in [Plug-in authoring](docs/development/PLUGIN_AUTHORING.md).
+The full contract is in [Plug-in authoring](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Jarvis-HEP-Sampler/PLUGIN_AUTHORING.md).
 
 A complete runnable card is provided in
 [examples/MyLatinHypercube.task.yaml](examples/MyLatinHypercube.task.yaml).
@@ -120,7 +120,7 @@ Jarvis run examples/MyLatinHypercube.task.yaml
 
 `jsampler check` accepts a sampler file only and does not need `load` first. It checks the method name before options schema, `prepare` or drawing points. A reserved-name failure returns exit 2; algorithm output or repeatability failures return exit 1. For a loaded method, use `jsampler info <Method>` to find its source file, then check that file. `Jarvis check` is the calculator smoke: its identity, bound source and checkpoint stay under `DATABASE/test` and `checkpoints/<scan>/<Method>/check/`, and the formal scan's science database and resume checkpoint stay in place.
 
-The command-line layout, errors, exit codes and JSON format follow the [Jarvis CLI design](https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP/blob/master/docs/JARVIS_CLI_DESIGN.md).
+The command-line layout, errors, exit codes and JSON format follow the [Jarvis CLI design](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Ecosystem/JARVIS_CLI_DESIGN.md).
 
 Reloading the same method updates future scans. Removing the registration
 preserves an existing scan's bound source and its normal `Jarvis run ... --resume`
@@ -161,7 +161,9 @@ SamplerRegistry().load(path)                             # jsampler load
 
 ## Documentation
 
-- [Plug-in authoring](docs/development/PLUGIN_AUTHORING.md)
+- [Plug-in authoring](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Jarvis-HEP-Sampler/PLUGIN_AUTHORING.md)
+- [Developer documentation](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/blob/main/Docs/Jarvis-HEP-Sampler/README.md)
+- [Changelog](CHANGELOG.md)
 
 ## Status
 
