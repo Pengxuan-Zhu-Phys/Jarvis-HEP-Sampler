@@ -6,6 +6,13 @@ Release history of the `Jarvis-HEP-Sampler` distribution (import package
 
 ## 1.1.1 — 2026-10-18
 
+- Exclude maintainer release helpers, local configuration, credentials, and
+  generated files from distribution archives. The entire local `research/`
+  tree remains untracked and is excluded from distributions.
+
+- The standalone `jhsrel` command now supports read-only `--dry` checks and
+  completes a PyPI release with a local editable install, Git tag, and GitHub
+  release.
 - The README, which is the PyPI project description, matches the published
   version: the install pin and the host-contract note named 1.0.3. Links in it
   are absolute so they work on PyPI.

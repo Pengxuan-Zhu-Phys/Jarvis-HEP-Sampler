@@ -55,3 +55,26 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+# Keep local credentials and generated files out of wheel package data.
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "**/.DS_Store",
+    "**/*.py[cod]",
+    "**/.env",
+    "**/.env.*",
+    "**/.envrc",
+    "**/.pypirc",
+    "**/.pypirc.*",
+    "**/.twinerc",
+    "**/.pypi-token*",
+    "**/.mcp.json",
+    "**/release.env",
+    "**/twine.env",
+    "**/*.code-workspace",
+    "**/*.swp",
+    "**/*.swo",
+    "**/*~",
+    "**/*.bak",
+    "**/*.tmp",
+]

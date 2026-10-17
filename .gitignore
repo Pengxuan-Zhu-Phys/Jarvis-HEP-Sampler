@@ -34,3 +34,50 @@ env/
 .DS_Store
 .idea/
 .vscode/
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+.envrc
+.pypirc
+.pypirc.*
+.twinerc
+.twine/
+.pypi/
+.pypi-token*
+release.env
+twine.env
+/.aws/
+/.ssh/
+
+# Machine-local editor and assistant configuration
+/.claude/
+/.codex/
+/.agents/
+/.cursor/
+/.mcp.json
+*.code-workspace
+
+# Local caches, reports, and temporary files
+.cache/
+.ipynb_checkpoints/
+.tox/
+.nox/
+.coverage.*
+coverage.xml
+*.dist-info/
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+*.log
+
+# Local workflow copies
+/github CI/
+
+# Local algorithm research; never commit or publish this tree.
+/research/

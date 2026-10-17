@@ -2,3 +2,31 @@ include CHANGELOG.md
 recursive-include examples *.py *.yaml
 global-exclude .DS_Store
 recursive-include tests *.py
+
+# Git ignores do not control source distributions.
+exclude jhsrel
+prune docs
+prune .github
+prune .claude
+prune .codex
+prune .agents
+prune .cursor
+prune .idea
+prune .vscode
+prune .aws
+prune .ssh
+prune .twine
+prune .pypi
+prune .venv
+prune venv
+prune env
+prune .cache
+prune .pytest_cache
+prune .ruff_cache
+prune .mypy_cache
+prune .tox
+prune .nox
+prune .ipynb_checkpoints
+global-exclude .DS_Store *.py[cod] .env .env.* .envrc .pypirc .pypirc.* .twinerc .pypi-token* .mcp.json release.env twine.env *.code-workspace *.swp *.swo *~ *.bak *.tmp
+prune scripts
+prune research

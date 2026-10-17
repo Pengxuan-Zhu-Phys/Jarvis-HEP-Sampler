@@ -172,3 +172,30 @@ Alpha. API version 1 supports the independent execution contract; generational m
 ## License
 
 MIT. See [LICENSE](https://github.com/Pengxuan-Zhu-Phys/Jarvis-HEP-Sampler/blob/main/LICENSE). Copyright (c) 2026 Pengxuan Zhu.
+
+## Releasing
+
+`jhsrel` is a maintainer-local script, excluded from Git and distribution archives.
+
+Record changes in `CHANGELOG.md`, then run from this checkout (replace the
+example version with the intended release):
+
+```bash
+./jhsrel 1.1.1 --dry
+./jhsrel 1.1.1
+```
+
+`--dry` performs read-only source and release-note checks. The normal command
+requires a clean Git checkout, builds and checks the wheel and sdist, uploads
+to PyPI, refreshes the local version with `python3 -m pip install -e .`, and
+verifies the installed version. Only then does it commit the version, push the
+`vX.Y.Z` tag, and create a GitHub release with changelog notes. Configure Twine
+and `gh` authentication before publishing.
+
+## Local research
+
+Maintainer experiments live under `research/`. The entire directory is ignored
+by Git and excluded from source distributions and wheels. Editable installation
+only installs the SDK under `src/`; research code is run explicitly from the
+checkout. Development notes live in
+[Jarvis-Books](https://github.com/Pengxuan-Zhu-Phys/Jarvis-Books/tree/main/Docs/Jarvis-HEP-Sampler).
